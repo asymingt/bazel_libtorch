@@ -1,0 +1,9 @@
+module(
+    name = "kineto",
+    version = "0.0.0-20260805-15f4784",
+    bazel_compatibility = [">=7.2.1"],
+    compatibility_level = 1,
+)
+
+bazel_dep(name = "rules_cc", version = "0.2.26")
+bazel_dep(name = "rules_license", version = "1.0.0")

@@ -1,0 +1,9 @@
+{
+    "integrity": "sha256-JfPYaohmmLB7LxHiIHiVjZ2rnYZV1VyIfdWV0x649ZU=",
+    "strip_prefix": "kineto-15f4784a3471d4db8b31720d528f2f57cd2b1f40",
+    "url": "https://github.com/pytorch/kineto/archive/15f4784a3471d4db8b31720d528f2f57cd2b1f40.tar.gz",
+    "overlay": {
+        "BUILD.bazel": "sha256-Nel6F/Wy1fvCLOC1yKtyxCCj6ft1OwNC1d2mICgPoo0=",
+        "MODULE.bazel": "sha256-XJ+QcB5VQMf5ZZv3AgOWtI3b8nOtRNVVeMNhAx2OTj4="
+    }
+}

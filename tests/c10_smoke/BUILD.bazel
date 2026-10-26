@@ -1,0 +1,18 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_test(
+    name = "c10_smoke_test",
+    srcs = ["c10_smoke_test.cc"],
+    copts = ["-std=gnu++20"],
+    deps = ["@libtorch//:c10"],
+)
+
+# The same checks against the shared library (libc10.so / libc10.dylib /
+# c10.dll) instead of the static one.
+cc_test(
+    name = "c10_shared_smoke_test",
+    srcs = ["c10_smoke_test.cc"],
+    copts = ["-std=gnu++20"],
+    dynamic_deps = ["@libtorch//:c10_shared"],
+    deps = ["@libtorch//:c10"],
+)

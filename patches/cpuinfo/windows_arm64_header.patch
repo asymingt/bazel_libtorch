@@ -1,0 +1,12 @@
+diff --git a/BUILD.bazel b/BUILD.bazel
+index 100ec80..4d757ba 100644
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -123,6 +123,7 @@ WINDOWS_X86_SRCS = [
+ WINDOWS_ARM_SRCS = [
+     "src/arm/windows/init-by-logical-sys-info.c",
+     "src/arm/windows/init.c",
++    "src/arm/windows/windows-arm-init.h",
+ ]
+ 
+ MACH_X86_SRCS = [

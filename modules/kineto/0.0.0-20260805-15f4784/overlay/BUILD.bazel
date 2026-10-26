@@ -1,0 +1,23 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+    license_text = "LICENSE",
+)
+
+exports_files(["LICENSE"])
+
+# libkineto's public headers. PyTorch's profiler includes some of them (e.g.
+# <ActivityType.h>) even when it is built without Kineto (USE_KINETO).
+cc_library(
+    name = "kineto_headers",
+    hdrs = glob(["libkineto/include/*.h"]),
+    includes = ["libkineto/include"],
+)

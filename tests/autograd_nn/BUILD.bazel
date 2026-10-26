@@ -1,0 +1,11 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_test(
+    name = "autograd_nn_test",
+    srcs = ["autograd_nn_test.cc"],
+    copts = ["-std=gnu++20"],
+    deps = [
+        "//tests/common:check",
+        "@libtorch//:torch",
+    ],
+)

@@ -1,0 +1,684 @@
+load("@bazel_skylib//lib:selects.bzl", "selects")
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_shared_library.bzl", "cc_shared_library")
+load("@rules_cuda//cuda:defs.bzl", "cuda_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:py_library.bzl", "py_library")
+load(":libtorch_codegen.bzl", "libtorch_aten_codegen", "libtorch_autograd_codegen")
+load(":libtorch_config.bzl", "LIBTORCH_COPTS", "libtorch_cpu_config_headers", "libtorch_cuda_config_headers", "libtorch_generated_headers", "windows_def_file")
+load(":libtorch_sources.bzl", "ATEN_CPU_EXCLUDES", "ATEN_CPU_GLOBS", "ATEN_CPU_KERNEL_GLOBS", "ATEN_CUDA_GLOBS", "ATEN_CUDA_KERNEL_GLOBS", "C10_CUDA_SOURCES", "TORCH_CPU_ITT_SOURCES", "TORCH_CPU_SOURCES", "TORCH_CUDA_SOURCES", "TORCH_HEADER_GLOBS")
+
+package(
+    default_applicable_licenses = [":license"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+    license_text = "LICENSE",
+)
+
+exports_files([
+    "LICENSE",
+    "NOTICE",
+])
+
+# -----------------------------------------------------------------------------
+# Target platforms
+# -----------------------------------------------------------------------------
+
+[
+    config_setting(
+        name = "{}_{}".format(os, cpu),
+        constraint_values = [
+            "@platforms//os:{}".format(constraint_os),
+            "@platforms//cpu:{}".format(constraint_cpu),
+        ],
+        visibility = ["//visibility:public"],
+    )
+    for os, constraint_os in [
+        ("linux", "linux"),
+        ("osx", "osx"),
+        ("windows", "windows"),
+    ]
+    for cpu, constraint_cpu in [
+        ("x86_64", "x86_64"),
+        ("arm64", "aarch64"),
+    ]
+]
+
+selects.config_setting_group(
+    name = "unix",
+    match_any = [
+        "@platforms//os:linux",
+        "@platforms//os:osx",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# -----------------------------------------------------------------------------
+# Accelerators
+#
+# Each backend is built for every target platform that supports it, unless it
+# is switched off with --@libtorch//:enable_<backend>=False. Depend on the
+# resolved `:<backend>_enabled` settings, never on the flags directly.
+# -----------------------------------------------------------------------------
+
+[
+    bool_flag(
+        name = "enable_" + backend,
+        build_setting_default = True,
+        visibility = ["//visibility:public"],
+    )
+    for backend in [
+        "cuda",
+        "mps",
+        "rocm",
+        "vulkan",
+        "xpu",
+    ]
+]
+
+[
+    config_setting(
+        name = "_enable_{}_set".format(backend),
+        flag_values = {":enable_" + backend: "True"},
+    )
+    for backend in [
+        "cuda",
+        "mps",
+        "rocm",
+        "vulkan",
+        "xpu",
+    ]
+]
+
+# NVIDIA publishes CUDA redistributables for linux-x86_64, linux-sbsa and
+# windows-x86_64 only. A valid @rules_cuda toolchain is also required: it is
+# missing on macOS hosts, which have no CUDA host tools (ptxas, fatbinary).
+#
+# windows_x86_64 is not enabled yet: the CUDA headers assume MSVC whenever
+# _WIN32 is defined (e.g. crt/math_functions.hpp declares host-only
+# __signbit/__isinf for !_MSC_VER), so Clang cannot compile CUDA for the
+# MinGW-UCRT target. @rules_cuda still provides the windows-x86_64 libraries.
+selects.config_setting_group(
+    name = "_cuda_platform",
+    match_any = [
+        ":linux_x86_64",
+        ":linux_arm64",
+    ],
+)
+
+selects.config_setting_group(
+    name = "cuda_enabled",
+    match_all = [
+        ":_enable_cuda_set",
+        ":_cuda_platform",
+        "@rules_cuda//cuda:is_enabled",
+        "@rules_cuda//cuda:is_valid_toolchain_found",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+selects.config_setting_group(
+    name = "_rocm_xpu_platform",
+    match_any = [
+        ":linux_x86_64",
+        ":windows_x86_64",
+    ],
+)
+
+selects.config_setting_group(
+    name = "rocm_enabled",
+    match_all = [
+        ":_enable_rocm_set",
+        ":_rocm_xpu_platform",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+selects.config_setting_group(
+    name = "xpu_enabled",
+    match_all = [
+        ":_enable_xpu_set",
+        ":_rocm_xpu_platform",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+selects.config_setting_group(
+    name = "_vulkan_platform",
+    match_any = [
+        "@platforms//os:linux",
+        "@platforms//os:windows",
+    ],
+)
+
+selects.config_setting_group(
+    name = "vulkan_enabled",
+    match_all = [
+        ":_enable_vulkan_set",
+        ":_vulkan_platform",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+selects.config_setting_group(
+    name = "mps_enabled",
+    match_all = [
+        ":_enable_mps_set",
+        ":osx_arm64",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# -----------------------------------------------------------------------------
+# Code generation (torchgen, see libtorch_codegen.bzl)
+# -----------------------------------------------------------------------------
+
+py_library(
+    name = "torchgen",
+    srcs = glob(["torchgen/**/*.py"]),
+    imports = ["."],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pyyaml",
+        "@typing_extensions",
+    ],
+)
+
+libtorch_aten_codegen(name = "aten_generated")
+
+libtorch_autograd_codegen(name = "autograd_generated")
+
+# -----------------------------------------------------------------------------
+# torch/headeronly
+# -----------------------------------------------------------------------------
+
+# torch/headeronly/macros/cmake_macros.h and torch/headeronly/version.h.
+libtorch_generated_headers(name = "headeronly_generated_headers")
+
+cc_library(
+    name = "headeronly",
+    hdrs = glob(["torch/headeronly/**/*.h"]) + [
+        ":headeronly_generated_headers",
+    ],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
+
+# -----------------------------------------------------------------------------
+# c10 (c10/CMakeLists.txt)
+# -----------------------------------------------------------------------------
+
+_C10_DIRS = [
+    "c10/core",
+    "c10/macros",
+    "c10/mobile",
+    "c10/util",
+]
+
+# c10/util/Semaphore.h includes <moodycamel/...>, which upstream vendors in
+# third_party/concurrentqueue (a newer commit than the BCR concurrentqueue
+# module, and with the `moodycamel/` include prefix the BCR module lacks).
+cc_library(
+    name = "moodycamel",
+    hdrs = glob(["third_party/concurrentqueue/moodycamel/*.h"]),
+    includes = ["third_party/concurrentqueue"],
+)
+
+# MinGW-w64 compatibility for upstream code written for MSVC: mixed-case
+# Windows SDK headers (e.g. <Windows.h>) forwarding to MinGW-w64's lowercase
+# ones, c10_mingw_compat.h (force-included into :c10 on Windows), and the
+# aligned allocation functions of mimalloc.h.
+cc_library(
+    name = "mingw_compat",
+    hdrs = glob(["mingw/include/*.h"]),
+    includes = ["mingw/include"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+cc_library(
+    name = "c10",
+    # c10/macros is header-only.
+    srcs = glob([d + "/**/*.cpp" for d in _C10_DIRS if d != "c10/macros"]),
+    hdrs = glob([d + "/**/*.h" for d in _C10_DIRS]),
+    copts = LIBTORCH_COPTS + select({
+        "@platforms//os:windows": [
+            "-include",
+            "c10_mingw_compat.h",
+        ],
+        "//conditions:default": [],
+    }),
+    implementation_deps = [
+        ":moodycamel",
+        "@cpuinfo",
+        "@fmt",
+        "@nlohmann_json//:json",
+    ] + select({
+        "@platforms//os:windows": [":mingw_compat"],
+        "//conditions:default": [],
+    }),
+    includes = ["."],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-pthread",
+            "-ldl",
+        ],
+        "@platforms//os:osx": ["-lpthread"],
+        # c10/util/win32-headers.h, Backtrace.cpp and thread_name.cpp.
+        "@platforms//os:windows": [
+            "-ldbghelp",
+            "-lws2_32",
+            "-ladvapi32",
+            "-lpsapi",
+        ],
+        "//conditions:default": [],
+    }),
+    local_defines = [
+        "C10_BUILD_MAIN_LIB",
+        "SUPPORTS_BACKTRACE=0",
+    ] + select({
+        # Like upstream on Windows. The CPU allocator's mi_malloc_aligned() and
+        # mi_free() come from mingw/include/mimalloc.h (see there).
+        "@platforms//os:windows": ["USE_MIMALLOC"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+    deps = [
+        ":headeronly",
+        "@gflags",
+        "@glog",
+    ],
+)
+
+# c10 is built without C10_BUILD_SHARED_LIBS (no __declspec(dllexport)), so on
+# Windows the DLL exports the symbols listed in a generated DEF file.
+windows_def_file(
+    name = "c10_def",
+    dll_name = "c10.dll",
+    library = ":c10",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+cc_shared_library(
+    name = "c10_shared",
+    shared_lib_name = select({
+        "@platforms//os:osx": "libc10.dylib",
+        "@platforms//os:windows": "c10.dll",
+        "//conditions:default": "libc10.so",
+    }),
+    visibility = ["//visibility:public"],
+    win_def_file = select({
+        "@platforms//os:windows": ":c10_def",
+        "//conditions:default": None,
+    }),
+    deps = [":c10"],
+)
+
+# -----------------------------------------------------------------------------
+# torch_cpu (caffe2/CMakeLists.txt, aten/src/ATen/CMakeLists.txt)
+# -----------------------------------------------------------------------------
+
+# aten/src/ATen/Config.h and caffe2/core/macros.h.
+libtorch_cpu_config_headers(name = "torch_cpu_config_headers")
+
+[
+    filegroup(
+        name = "{}_{}".format(generated, group),
+        srcs = [":" + generated],
+        output_group = group,
+    )
+    for generated, groups in [
+        ("aten_generated", [
+            "aoti_cuda_sources",
+            "aoti_sources",
+            "cpu_kernel_sources",
+            "cuda_headers",
+            "cuda_kernel_sources",
+            "cuda_sources",
+            "headers",
+            "sources",
+        ]),
+        ("autograd_generated", [
+            "headers",
+            "sources",
+        ]),
+    ]
+    for group in groups
+]
+
+# <pocketfft_hdronly.h>, which the BCR module only provides relative to its
+# repository root (without an include path).
+copy_file(
+    name = "pocketfft_hdronly_h",
+    src = "@pocketfft//:pocketfft_hdronly.h",
+    out = "third_party/pocketfft/pocketfft_hdronly.h",
+)
+
+cc_library(
+    name = "pocketfft",
+    hdrs = [":pocketfft_hdronly_h"],
+    includes = ["third_party/pocketfft"],
+    deps = ["@pocketfft"],
+)
+
+# The headers of torch_cpu and of its C++ frontend (torch/csrc/api/include).
+cc_library(
+    name = "torch_cpu_headers",
+    hdrs = glob(TORCH_HEADER_GLOBS) + [
+        ":aten_generated_headers",
+        ":autograd_generated_headers",
+        ":torch_cpu_config_headers",
+    ],
+    # Which CPU capabilities DispatchStub (ATen/native/DispatchStub.h) has
+    # kernels for. Its layout depends on them, so every user sees the same.
+    defines = select({
+        "@platforms//cpu:x86_64": [
+            "HAVE_AVX2_CPU_DEFINITION",
+            "HAVE_AVX512_CPU_DEFINITION",
+        ],
+        ":linux_arm64": [
+            "AT_BUILD_ARM_VEC256_WITH_SLEEF",
+            "CAFFE2_PERF_WITH_SVE=1",
+            "HAVE_SVE_CPU_DEFINITION",
+        ],
+        "@platforms//cpu:aarch64": ["AT_BUILD_ARM_VEC256_WITH_SLEEF"],
+        "//conditions:default": [],
+    }),
+    includes = [
+        ".",
+        "aten/src",
+        "torch/csrc/api/include",
+    ],
+    deps = [
+        ":c10",
+        ":headeronly",
+        "@fmt",
+        "@kineto//:kineto_headers",
+        "@nlohmann_json//:json",
+        # <sleef.h>, from ATen's vectorized (ATen/cpu/vec) headers.
+        "@sleef",
+    ],
+)
+
+# Compile definitions that upstream's CMake build sets for all of torch_cpu
+# (cmake/Dependencies.cmake, the top-level CMakeLists.txt and
+# caffe2/CMakeLists.txt).
+TORCH_CPU_LOCAL_DEFINES = [
+    "CAFFE2_BUILD_MAIN_LIB",
+    "MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS",
+    "USE_EXTERNAL_MZCRC",
+] + select({
+    "@platforms//os:linux": [
+        "HAVE_MALLOC_USABLE_SIZE=1",
+        "HAVE_MMAP=1",
+        "HAVE_POSIX_FALLOCATE=1",
+        "HAVE_SHM_OPEN=1",
+        "HAVE_SHM_UNLINK=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    "@platforms//os:osx": [
+        "HAVE_MMAP=1",
+        "HAVE_SHM_OPEN=1",
+        "HAVE_SHM_UNLINK=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    "@platforms//os:windows": [
+        "NOMINMAX",
+        "WIN32_LEAN_AND_MEAN",
+        "_UCRT_LEGACY_INFINITY",
+    ],
+    "//conditions:default": [],
+})
+
+# aten/src/ATen/native/cpu kernels, compiled once per CPU capability
+# (cmake/Codegen.cmake). DispatchStub picks the best one the CPU supports at
+# runtime (or the one ATEN_CPU_CAPABILITY asks for).
+#
+# Capability: (target platform, compiler flags). SVE needs Linux (on macOS and
+# Windows on Arm, DEFAULT uses NEON).
+_CPU_CAPABILITIES = {
+    "DEFAULT": ("//conditions:default", []),
+    "AVX2": ("@platforms//cpu:x86_64", [
+        "-mavx2",
+        "-mfma",
+        "-mf16c",
+    ]),
+    "AVX512": ("@platforms//cpu:x86_64", [
+        "-mavx512f",
+        "-mavx512bw",
+        "-mavx512vl",
+        "-mavx512dq",
+        "-mfma",
+    ]),
+    "SVE256": (":linux_arm64", [
+        "-march=armv8-a+sve+bf16",
+        "-D__ARM_FEATURE_BF16",
+        "-msve-vector-bits=256",
+    ]),
+    "SVE128": (":linux_arm64", [
+        "-march=armv8-a+sve+bf16",
+        "-D__ARM_FEATURE_BF16",
+        "-msve-vector-bits=128",
+    ]),
+}
+
+[
+    cc_library(
+        name = "aten_cpu_kernels_" + capability.lower(),
+        srcs = glob(ATEN_CPU_KERNEL_GLOBS) + [":aten_generated_cpu_kernel_sources"],
+        copts = LIBTORCH_COPTS + flags,
+        local_defines = TORCH_CPU_LOCAL_DEFINES + [
+            "CPU_CAPABILITY=" + capability,
+            "CPU_CAPABILITY_" + capability,
+        ],
+        target_compatible_with = [] if platform == "//conditions:default" else select({
+            platform: [],
+            "//conditions:default": ["@platforms//:incompatible"],
+        }),
+        deps = [
+            ":torch_cpu_headers",
+            "@cpuinfo",
+        ],
+        alwayslink = True,
+    )
+    for capability, (platform, flags) in _CPU_CAPABILITIES.items()
+]
+
+# caffe2/perfkernels/*_{avx,avx2,sve}.cc, which the generic sources dispatch
+# to (caffe2/perfkernels/common.h).
+[
+    cc_library(
+        name = "caffe2_perfkernels_" + isa,
+        srcs = glob(["caffe2/perfkernels/*_{}.cc".format(isa)]),
+        copts = LIBTORCH_COPTS + flags,
+        local_defines = TORCH_CPU_LOCAL_DEFINES,
+        target_compatible_with = select({
+            platform: [],
+            "//conditions:default": ["@platforms//:incompatible"],
+        }),
+        deps = [":torch_cpu_headers"],
+        alwayslink = True,
+    )
+    for isa, platform, flags in [
+        ("avx", "@platforms//cpu:x86_64", [
+            "-mavx",
+            "-mf16c",
+        ]),
+        ("avx2", "@platforms//cpu:x86_64", [
+            "-mavx2",
+            "-mfma",
+            "-mavx",
+            "-mf16c",
+        ]),
+        ("sve", ":linux_arm64", ["-march=armv8-a+sve"]),
+    ]
+]
+
+cc_library(
+    name = "torch_cpu",
+    srcs = glob(
+        ATEN_CPU_GLOBS,
+        # Like CMake's file(GLOB), some patterns match nothing (yet).
+        allow_empty = True,
+        exclude = ATEN_CPU_EXCLUDES,
+    ) + TORCH_CPU_SOURCES + [
+        ":aten_generated_aoti_sources",
+        ":aten_generated_sources",
+        ":autograd_generated_sources",
+    ] + select({
+        "@platforms//cpu:x86_64": TORCH_CPU_ITT_SOURCES,
+        "//conditions:default": [],
+    }),
+    copts = LIBTORCH_COPTS,
+    implementation_deps = [
+        ":pocketfft",
+        "//third_party/miniz-3.0.2:miniz",
+        "@cpuinfo",
+        "@flatbuffers//:runtime_cc",
+    ] + select({
+        "@platforms//cpu:x86_64": ["@ittapi//:ittnotify"],
+        "//conditions:default": [],
+    }),
+    local_defines = TORCH_CPU_LOCAL_DEFINES + select({
+        "@platforms//cpu:x86_64": ["USE_ITT"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+    # NOTE [ Linking AVX and non-AVX files ] in caffe2/CMakeLists.txt: the
+    # kernels come after torch_cpu's own objects, and AVX512 last.
+    deps = [
+        ":c10",
+        ":torch_cpu_headers",
+        ":aten_cpu_kernels_default",
+    ] + select({
+        "@platforms//cpu:x86_64": [
+            ":aten_cpu_kernels_avx2",
+            ":aten_cpu_kernels_avx512",
+            ":caffe2_perfkernels_avx",
+            ":caffe2_perfkernels_avx2",
+        ],
+        ":linux_arm64": [
+            ":aten_cpu_kernels_sve128",
+            ":aten_cpu_kernels_sve256",
+            ":caffe2_perfkernels_sve",
+        ],
+        "//conditions:default": [],
+    }),
+    alwayslink = True,
+)
+
+# -----------------------------------------------------------------------------
+# CUDA (c10/cuda/CMakeLists.txt, caffe2/CMakeLists.txt): c10_cuda and
+# torch_cuda, built where :cuda_enabled holds.
+# -----------------------------------------------------------------------------
+
+_CUDA_COMPATIBLE = select({
+    ":cuda_enabled": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
+# c10/cuda/impl/cuda_cmake_macros.h and aten/src/ATen/cuda/CUDAConfig.h.
+libtorch_cuda_config_headers(name = "cuda_config_headers")
+
+cc_library(
+    name = "c10_cuda",
+    srcs = C10_CUDA_SOURCES,
+    hdrs = glob([
+        "c10/cuda/**/*.cuh",
+        "c10/cuda/**/*.h",
+    ], allow_empty = True) + [":cuda_config_headers"],
+    copts = LIBTORCH_COPTS,
+    includes = ["."],
+    linkopts = select({
+        "@platforms//os:linux": ["-ldl"],
+        "//conditions:default": [],
+    }),
+    local_defines = [
+        "C10_CUDA_BUILD_MAIN_LIB",
+        # c10/cuda/driver_api.cpp loads the driver (libcuda) at runtime.
+        "PYTORCH_C10_DRIVER_API_SUPPORTED",
+    ],
+    target_compatible_with = _CUDA_COMPATIBLE,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":c10",
+        "@cuda//:cuda_runtime",
+        # <nvml.h> (c10/cuda/driver_api.h); libnvidia-ml is loaded at runtime.
+        "@cuda//:nvml_headers",
+    ],
+)
+
+# The CUDA libraries that torch_cuda links (all but the runtime load the
+# driver lazily, so binaries start on machines without an NVIDIA driver).
+_CUDA_LIBRARIES = [
+    "@cuda//:cublas",
+    "@cuda//:cufft",
+    "@cuda//:curand",
+    "@cuda//:cusolver",
+    "@cuda//:cusparse",
+    "@cuda//:nvrtc",
+    "@cuda//:nvtx3",
+]
+
+TORCH_CUDA_LOCAL_DEFINES = [
+    "TORCH_CUDA_BUILD_MAIN_LIB",
+    "USE_CUDA",
+    "USE_MEM_EFF_ATTENTION",
+]
+
+# ATen's device code (ATen_CUDA_CU_SRCS).
+cuda_library(
+    name = "aten_cuda_kernels",
+    srcs = glob(ATEN_CUDA_KERNEL_GLOBS, allow_empty = True) + [":aten_generated_cuda_kernel_sources"],
+    copts = LIBTORCH_COPTS,
+    host_copts = LIBTORCH_COPTS,
+    local_defines = TORCH_CPU_LOCAL_DEFINES + TORCH_CUDA_LOCAL_DEFINES,
+    target_compatible_with = _CUDA_COMPATIBLE,
+    deps = [
+        ":c10_cuda",
+        ":torch_cpu_headers",
+        "@cuda//:cub",
+        "@cuda//:libcudacxx",
+        "@cuda//:thrust",
+        "@cutlass",
+    ] + _CUDA_LIBRARIES,
+    alwayslink = True,
+)
+
+cc_library(
+    name = "torch_cuda",
+    srcs = glob(ATEN_CUDA_GLOBS, allow_empty = True) + TORCH_CUDA_SOURCES + [
+        ":aten_generated_aoti_cuda_sources",
+        ":aten_generated_cuda_sources",
+    ],
+    hdrs = [":aten_generated_cuda_headers"],
+    copts = LIBTORCH_COPTS,
+    local_defines = TORCH_CPU_LOCAL_DEFINES + TORCH_CUDA_LOCAL_DEFINES,
+    target_compatible_with = _CUDA_COMPATIBLE,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":aten_cuda_kernels",
+        ":c10_cuda",
+        ":torch_cpu",
+        "@cutlass",
+    ] + _CUDA_LIBRARIES,
+    # CUDAHooks and the CUDA kernels register themselves at static
+    # initialization (REGISTER_CUDA_HOOKS, TORCH_LIBRARY_IMPL).
+    alwayslink = True,
+)
+
+# libtorch: torch_cpu, plus torch_cuda where :cuda_enabled holds.
+cc_library(
+    name = "torch",
+    visibility = ["//visibility:public"],
+    deps = [":torch_cpu"] + select({
+        ":cuda_enabled": [":torch_cuda"],
+        "//conditions:default": [],
+    }),
+)

@@ -1,0 +1,32 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_cuda//cuda:defs.bzl", "cuda_library")
+
+# Only built where @libtorch//:cuda_enabled holds (CUDA-capable target
+# platform and a valid @rules_cuda toolchain on the host).
+cuda_library(
+    name = "add_kernel",
+    srcs = ["add_kernel.cu"],
+    hdrs = ["add_kernel.h"],
+    copts = ["-std=gnu++20"],
+    target_compatible_with = select({
+        "@libtorch//:cuda_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = ["@libtorch//:c10"],
+)
+
+# Runs everywhere: on CPU-only machines (or targets without CUDA) it only
+# exercises c10; with an NVIDIA driver and GPU present it also runs the kernel.
+cc_test(
+    name = "hello_world_test",
+    srcs = ["main.cc"],
+    copts = ["-std=gnu++20"],
+    local_defines = select({
+        "@libtorch//:cuda_enabled": ["HELLO_WORLD_HAS_CUDA"],
+        "//conditions:default": [],
+    }),
+    deps = ["@libtorch//:c10"] + select({
+        "@libtorch//:cuda_enabled": [":add_kernel"],
+        "//conditions:default": [],
+    }),
+)

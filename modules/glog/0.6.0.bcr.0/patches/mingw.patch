@@ -1,0 +1,17 @@
+diff --git a/src/windows/port.h b/src/windows/port.h
+index a71979f..eae5d9e 100755
+--- a/src/windows/port.h
++++ b/src/windows/port.h
+@@ -145,6 +145,12 @@ typedef int pid_t;
+ 
+ #endif  // _MSC_VER
+ 
++#ifdef __MINGW32__
++/* MinGW-w64 provides the POSIX functions that the _MSC_VER block above maps
++ * to their Windows counterparts (sleep(), close(), getpid(), ...). */
++#include <unistd.h>
++#endif  // __MINGW32__
++
+ // ----------------------------------- THREADS
+ #if defined(HAVE_PTHREAD)
+ # include <pthread.h>

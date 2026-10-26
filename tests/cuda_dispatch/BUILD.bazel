@@ -1,0 +1,17 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+# Only where @libtorch//:torch includes torch_cuda; runs everywhere it builds,
+# with or without an NVIDIA GPU and driver.
+cc_test(
+    name = "cuda_dispatch_test",
+    srcs = ["cuda_dispatch_test.cc"],
+    copts = ["-std=gnu++20"],
+    target_compatible_with = select({
+        "@libtorch//:cuda_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "//tests/common:check",
+        "@libtorch//:torch",
+    ],
+)

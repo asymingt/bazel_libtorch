@@ -1,0 +1,124 @@
+# Root workspace name
+
+module(
+    name = "libtorch_workspace",
+)
+
+# Hermetic LLVM toolchain
+
+bazel_dep(name = "llvm", version = "0.8.25")
+single_version_override(
+    module_name = "llvm",
+    patch_strip = 1,
+    patches = [
+        "//patches:llvm/header_search_paths.patch",
+        "//patches:llvm/msan_libcxx.patch",
+        "//patches:llvm/sanitizer_runtime_libunwind.patch",
+        "//patches:llvm/sanitizer_strip_foreign_source_paths.patch",
+        "//patches:llvm/windows_compiler_param_file.patch",
+        "//patches:llvm/windows_pkg_dir_symlinks.patch",
+        "//patches:llvm/runtime_library_search_directories_dedup.patch",
+        "//patches:llvm/mingw_def_extra_tokens.patch",
+        "//patches:llvm/osx_cryptex_frameworks.patch",
+        "//patches:llvm/libcxxabi_windows_static_visibility.patch",
+    ],
+    version = "0.8.25",
+)
+
+# Backends built into the from-source `@llvm-project` overlay (only used with
+# `--@llvm//toolchain:bootstrap_stage=stage1_from_source`). The prebuilt
+# cross-compiler always has every backend, so this list does not limit which
+# `--platforms` we can compile for; it mirrors the CPUs (X86, AArch64) and GPU
+# device targets (NVPTX for CUDA, AMDGPU for ROCm/HIP) that LibTorch ships.
+llvm = use_extension("@llvm//extensions:llvm.bzl", "llvm")
+llvm.version(llvm_version = "21.1.8")
+llvm.configure(
+    targets = [
+        "AArch64",
+        "AMDGPU",
+        "NVPTX",
+        "X86",
+    ],
+)
+use_repo(llvm, "llvm-project")
+
+register_toolchains(
+    "@llvm//toolchain:all",
+    dev_dependency = True,
+)
+
+# CUDA rules and the hermetic CUDA 12.8.1 redistributables. The patch maps
+# linux-arm64 hosts to linux-sbsa, disables @cuda on macOS hosts (NVIDIA ships
+# no host tools there), and adds select() aliases for the target libraries of
+# linux-x86_64, linux-sbsa and windows-x86_64 to @cuda//BUILD so CUDA targets
+# cross-compile. See patches/rules_cuda/.
+bazel_dep(name = "rules_cuda", version = "0.3.0")
+single_version_override(
+    module_name = "rules_cuda",
+    patch_strip = 1,
+    patches = [
+        "//patches:rules_cuda/multiplatform_redist.patch",
+        "//patches:rules_cuda/clang_host_defines.patch",
+    ],
+    version = "0.3.0",
+)
+
+cuda = use_extension("@rules_cuda//cuda:extensions.bzl", "toolchain")
+cuda.redist_json(
+    name = "rules_cuda_redist_json",
+    # The toolkit (cccl, cudart, nvcc) and the libraries that
+    # @libtorch//:torch_cuda uses. cuSOLVER and cuSPARSE need nvJitLink, and
+    # c10_cuda NVML's headers.
+    components = [
+        "cccl",
+        "cublas",
+        "cudart",
+        "cufft",
+        "cupti",
+        "curand",
+        "cusolver",
+        "cusparse",
+        "nvcc",
+        "nvjitlink",
+        "nvml",
+        "nvrtc",
+        "nvtx",
+    ],
+    version = "12.8.1",
+)
+cuda.toolkit(
+    name = "cuda",
+)
+use_repo(cuda, "cuda")
+
+# BCR modules
+
+# Not a direct dependency (libtorch -> cpuinfo), but overridden to list a
+# private header of its Windows-on-Arm backend in srcs, which windows_arm64
+# builds need. See patches/cpuinfo/.
+bazel_dep(name = "cpuinfo", version = "0.0.0-20260312-7607ca5")
+single_version_override(
+    module_name = "cpuinfo",
+    patch_strip = 1,
+    patches = ["//patches:cpuinfo/windows_arm64_header.patch"],
+    version = "0.0.0-20260312-7607ca5",
+)
+
+# Not a direct dependency (libtorch -> gflags), but overridden so that its
+# Windows branch is selected by the target platform rather than by the legacy
+# --cpu=x64_windows value, which MinGW builds never set. See patches/gflags/.
+bazel_dep(name = "gflags", version = "2.3.1")
+single_version_override(
+    module_name = "gflags",
+    patch_strip = 1,
+    patches = ["//patches:gflags/windows_platform.patch"],
+    version = "2.3.1",
+)
+
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_cc", version = "0.2.26")
+bazel_dep(name = "rules_license", version = "1.0.0")
+
+# LibTorch (served from the local registry under modules/, see .bazelrc)
+
+bazel_dep(name = "libtorch", version = "2.14.1")

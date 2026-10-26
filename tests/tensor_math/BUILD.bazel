@@ -1,0 +1,11 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_test(
+    name = "tensor_math_test",
+    srcs = ["tensor_math_test.cc"],
+    copts = ["-std=gnu++20"],
+    deps = [
+        "//tests/common:check",
+        "@libtorch//:torch",
+    ],
+)

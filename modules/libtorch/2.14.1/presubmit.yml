@@ -1,0 +1,17 @@
+matrix:
+  platform:
+    - debian11
+    - macos_arm64
+    - ubuntu2204
+    - ubuntu2404
+    - windows
+  bazel: [9.x, rolling]
+tasks:
+  verify_targets:
+    name: Verify build targets
+    platform: ${{ platform }}
+    bazel: ${{ bazel }}
+    build_targets:
+      - '@libtorch//:headeronly'
+      - '@libtorch//:c10'
+      - '@libtorch//:c10_shared'

@@ -1,0 +1,23 @@
+{
+    "integrity": "sha256-SzSGi6YcJHQN4nontsCcqggtpSGdZ1p96y27zhxas2Y=",
+    "strip_prefix": "pytorch-2.14.1",
+    "url": "https://github.com/pytorch/pytorch/archive/refs/tags/v2.14.1.tar.gz",
+    "overlay": {
+        "BUILD.bazel": "sha256-NzkWfE6eOpzy/L4N2elBFtyQoUc/U0oXkOSwe5WVGiw=",
+        "MODULE.bazel": "sha256-3ish3gMzp6E0TmOg4DBEXisyaOsVM9JM5sk54mWHKXA=",
+        "bazel/BUILD.bazel": "sha256-tOgkCn9XjIG16myz0hjiTGzX2vr6hAEnTF8b0Mg2TY8=",
+        "bazel/pyyaml.BUILD.bazel": "sha256-ccotaORlyHpMJ6N5k3/tXyHF9BRbqzYM1kXihsL3nVI=",
+        "bazel/src/export_without_onnx.cpp": "sha256-0uonkZu3k6VJWed2JbemjFYsVJpfTY9FJo8w5GFaGjo=",
+        "bazel/typing_extensions.BUILD.bazel": "sha256-CgSt+IoBwKUESgo6kcxLHF0j2bh6HHHX/LDp4GH3qWE=",
+        "libtorch_codegen.bzl": "sha256-l37Qd6FNq8UtAHDFmFMQ22O7P6yI7HVOFMneCXfM3Y0=",
+        "libtorch_config.bzl": "sha256-qT9TGhA8TKKFefxiPGBLXWDcT/tjQLlyRWMS7F97aWQ=",
+        "libtorch_sources.bzl": "sha256-wFKukKw424en1JsgdOLYinhEzyhTI7d1TfO9QIoNvFE=",
+        "mingw/include/Windows.h": "sha256-PrcUBnkPaHxX3J3zH/YNNvQpPQx1XOU8yIXL273W4J8=",
+        "mingw/include/c10_mingw_compat.h": "sha256-FgjM1oJFyDm1QhINpU+9G3qk5bWf8TR43v8OF52dYXA=",
+        "mingw/include/mimalloc.h": "sha256-0JZNj+Js8v7KitDVQO5DfhQK+ISuT5IvvqTWoOr9/Jk=",
+        "third_party/miniz-3.0.2/BUILD.bazel": "sha256-QGwfVxAvKdXcpiwDwqQIQPPMD5Q3OuF4zQKxO/2LAgg=",
+        "tools/BUILD.bazel": "sha256-zwY/Wa8OTv3fzsHsHsl/ev5IDmiEor1is6FXw1g7Ais=",
+        "tools/def_filter.c": "sha256-L4JWTIwODpOh/snseMgfSb8g/EUyxeIsXJMNopGEkb8=",
+        "tools/libtorch_codegen_main.py": "sha256-TZLLg3peAtAYm1zZUV4UgQb7wvWFpWcJLPVcN6Pj5TE="
+    }
+}

@@ -1,0 +1,21 @@
+diff --git a/src/utilities.cc b/src/utilities.cc
+index a332f1a..1155d30 100644
+--- a/src/utilities.cc
++++ b/src/utilities.cc
+@@ -70,6 +70,16 @@ bool IsGoogleLoggingInitialized() {
+   return g_program_invocation_short_name != NULL;
+ }
+ 
++// Until glog 0.6.0, IsGoogleLoggingInitialized() was internal, and some
++// projects (e.g. PyTorch's c10/util/Logging.cpp) declare and call it there.
++// Keep that symbol for compatibility.
++namespace glog_internal_namespace_ {
++GLOG_EXPORT bool IsGoogleLoggingInitialized();
++bool IsGoogleLoggingInitialized() {
++  return GOOGLE_NAMESPACE::IsGoogleLoggingInitialized();
++}
++}  // namespace glog_internal_namespace_
++
+ _END_GOOGLE_NAMESPACE_
+ 
+ // The following APIs are all internal.

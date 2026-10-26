@@ -1,0 +1,217 @@
+# Pull request CI.
+#
+# Structured into two sequential stages (`bazel 9.x` followed by `bazel last_rc`)
+# so that `last_rc` reuses the per-(host, target) disk caches populated by `9.x`.
+#
+# Before both stages, `registry` checks that the overlay hashes in every
+# modules/<name>/<version>/source.json are up to date.
+#
+# Within each stage:
+#   1. `native-*`: Matrix over {linux, darwin, windows} x {amd64, arm64} (6 jobs).
+#      Runs native analyze, build, and test (no `--platforms` flag; Bazel
+#      auto-detects the host via @platforms//host, and .bazelrc pins Linux to
+#      glibc 2.34 via //platforms:linux).
+#   2. `cross-*`: Every host above cross-compiling (analyze + build) to every
+#      other {os} x {arch} target via `--platforms=@llvm//platforms:...`
+#      (6 hosts x 5 targets = 30 jobs).
+#
+# Every job runs the reusable workflow in bazel.yaml, which also documents how
+# the per-(host, target) Bazel disk caches are keyed, restored, pruned and saved.
+#
+# `push` on main runs the full matrix (both stages, with tests) and also seeds
+# the Bazel caches from the default branch: GitHub lets every PR restore caches
+# saved on main, but a PR can never read another PR's caches. Only the 9.x
+# stage saves; PR runs then restore from those caches (actions/cache scope).
+# cache_cleanup.yaml deletes a PR's own caches when it is closed. Main runs
+# also publish one build status matrix per stage (see `status`).
+name: Pull Request
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+      - "design/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Superseded PR runs are cancelled; a main run always finishes, so a quick
+  # follow-up merge cannot leave main without a complete cache set.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  registry:
+    name: Check registry integrity
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check overlay hashes
+        run: tools/update_overlay_hashes.sh --check modules/*/*/
+
+  # ---------------------------------------------------------------------------
+  # Stage 1: Bazel 9.x (blocking)
+  # ---------------------------------------------------------------------------
+  native-9x:
+    name: native ${{ matrix.host }} / bazel 9.x
+    needs: [registry]
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [linux-amd64, linux-arm64, darwin-amd64, darwin-arm64, windows-amd64, windows-arm64]
+        include: &hosts
+          - { host: linux-amd64, runner: ubuntu-24.04 }
+          - { host: linux-arm64, runner: ubuntu-24.04-arm }
+          - { host: darwin-amd64, runner: macos-15-intel }
+          - { host: darwin-arm64, runner: macos-15 }
+          - { host: windows-amd64, runner: windows-2025 }
+          - { host: windows-arm64, runner: windows-11-arm }
+    uses: ./.github/workflows/bazel.yaml
+    with:
+      runner: ${{ matrix.runner }}
+      bazel_version: "9.x"
+      stage: 9x
+      host: ${{ matrix.host }}
+      target: ${{ matrix.host }}
+      test: true
+
+  cross-9x:
+    name: cross ${{ matrix.host }} -> ${{ matrix.target }} / bazel 9.x
+    # Cross builds only start once every native build is green: a native
+    # failure usually breaks the cross builds too, so this saves 30 jobs.
+    needs: [native-9x]
+    strategy:
+      fail-fast: false
+      matrix:
+        host: &all [linux-amd64, linux-arm64, darwin-amd64, darwin-arm64, windows-amd64, windows-arm64]
+        target: *all
+        # Same-platform pairs are covered by the native jobs.
+        exclude: &native_pairs
+          - { host: linux-amd64, target: linux-amd64 }
+          - { host: linux-arm64, target: linux-arm64 }
+          - { host: darwin-amd64, target: darwin-amd64 }
+          - { host: darwin-arm64, target: darwin-arm64 }
+          - { host: windows-amd64, target: windows-amd64 }
+          - { host: windows-arm64, target: windows-arm64 }
+        # `include` entries that only name `host` (or only `target`) extend
+        # every matching combination with the runner (or platform).
+        include: &hosts_and_targets
+          - { host: linux-amd64, runner: ubuntu-24.04 }
+          - { host: linux-arm64, runner: ubuntu-24.04-arm }
+          - { host: darwin-amd64, runner: macos-15-intel }
+          - { host: darwin-arm64, runner: macos-15 }
+          - { host: windows-amd64, runner: windows-2025 }
+          - { host: windows-arm64, runner: windows-11-arm }
+          - { target: linux-amd64, platform: "@llvm//platforms:linux_amd64_gnu.2.34" }
+          - { target: linux-arm64, platform: "@llvm//platforms:linux_arm64_gnu.2.34" }
+          - { target: darwin-amd64, platform: "@llvm//platforms:macos_amd64" }
+          - { target: darwin-arm64, platform: "@llvm//platforms:macos_arm64" }
+          - { target: windows-amd64, platform: "@llvm//platforms:windows_amd64" }
+          - { target: windows-arm64, platform: "@llvm//platforms:windows_arm64" }
+    uses: ./.github/workflows/bazel.yaml
+    with:
+      runner: ${{ matrix.runner }}
+      bazel_version: "9.x"
+      stage: 9x
+      host: ${{ matrix.host }}
+      target: ${{ matrix.target }}
+      platform: ${{ matrix.platform }}
+
+  # ---------------------------------------------------------------------------
+  # Build status matrices (main only)
+  # ---------------------------------------------------------------------------
+  # Renders the host x target outcome of this run's jobs as one SVG per stage
+  # (bazel 9.x and last_rc) and publishes them (plus JSON copies) to the
+  # orphan `status` branch, which the README embeds. Uses only GITHUB_TOKEN;
+  # pushes made with it do not trigger workflows.
+  status:
+    name: Publish build status matrices
+    needs: [native-9x, cross-9x, native-last-rc, cross-last-rc]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Render build status matrices
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p out
+          gh api --paginate \
+            "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs?per_page=100" \
+            --jq '.jobs[]' > jobs.jsonl
+          python3 .github/scripts/render_build_status.py jobs.jsonl out "$RUN_URL" "${{ github.sha }}" 9.x build_status_9x
+          python3 .github/scripts/render_build_status.py jobs.jsonl out "$RUN_URL" "${{ github.sha }}" last_rc build_status_last_rc
+
+      - name: Publish to the status branch
+        working-directory: out
+        run: |
+          git init -q -b status
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add build_status_*.svg build_status_*.json
+          git commit -q -m "Build status for ${{ github.sha }}"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" status
+
+  # ---------------------------------------------------------------------------
+  # Stage 2: Bazel last_rc (non-blocking, reuses caches from Stage 1)
+  # ---------------------------------------------------------------------------
+  native-last-rc:
+    name: native ${{ matrix.host }} / bazel last_rc
+    needs: [native-9x]
+    strategy:
+      fail-fast: false
+      matrix:
+        host: *all
+        include: *hosts
+    uses: ./.github/workflows/bazel.yaml
+    with:
+      runner: ${{ matrix.runner }}
+      bazel_version: last_rc
+      stage: lastrc
+      host: ${{ matrix.host }}
+      target: ${{ matrix.host }}
+      test: true
+      allow_failure: true
+      # Restores the 9.x entry for the same commit; saving its own (nearly
+      # identical) copy would double cache storage per commit.
+      save_disk_cache: false
+
+  cross-last-rc:
+    name: cross ${{ matrix.host }} -> ${{ matrix.target }} / bazel last_rc
+    needs: [cross-9x]
+    strategy:
+      fail-fast: false
+      matrix:
+        host: *all
+        target: *all
+        exclude: *native_pairs
+        include: *hosts_and_targets
+    uses: ./.github/workflows/bazel.yaml
+    with:
+      runner: ${{ matrix.runner }}
+      bazel_version: last_rc
+      stage: lastrc
+      host: ${{ matrix.host }}
+      target: ${{ matrix.target }}
+      platform: ${{ matrix.platform }}
+      allow_failure: true
+      # Restores the 9.x entry for the same commit; saving its own (nearly
+      # identical) copy would double cache storage per commit.
+      save_disk_cache: false

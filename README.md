@@ -117,7 +117,7 @@ boundaries and built for Linux, macOS and Windows on both `x86_64` and `arm64`:
 | AMD ROCm / HIP | `@libtorch//:c10_hip`, `@libtorch//:torch_hip` (via `hipify_python.py` + Clang native `-x hip` + `@rocm_device_libs` bitcode + `@hip_stub` link-time DSOs) |
 | Intel XPU & Vulkan | `@libtorch//:c10_xpu`, `@libtorch//:torch_xpu` (via `@sycl_stub` + `@level_zero_stub` + `@onednn`), plus `USE_VULKAN=1` compute shaders in `:torch_cpu` |
 | Apple Silicon (`macos_arm64`) | `MPS` (`Metal` / `MetalPerformanceShaders` / `MetalPerformanceShadersGraph`) compiled directly into `:torch_cpu` on `macos_arm64` |
-| Companion Modules | `sleef`, `ittapi`, `fbgemm`, `asmjit`, `xnnpack`, `kineto`, `gloo`, `vulkan-memory-allocator`, `rocm-device-libs`, `hip-stub`, `sycl-stub`, `level-zero-stub` |
+| Companion Modules | `glog` (0.6.0 with Bazel 9 and MinGW patches, as c10 needs glog <= 0.6), `sleef`, `ittapi`, `fbgemm`, `asmjit`, `xnnpack`, `kineto`, `gloo`, `vulkan-memory-allocator`, `rocm-device-libs`, `hip-stub`, `sycl-stub`, `level-zero-stub` |
 
 ### Hardware accelerators by `--platforms`
 
@@ -152,8 +152,10 @@ MinGW-UCRT sysroot targeting `x86_64-w64-windows-gnu` and
 (`cl.exe`/`clang-cl`) is not required or supported. This workspace's `.bazelrc`
 also sets flags the build relies on: `--features=system_include_paths`,
 `--@llvm//config:experimental_stub_libgcc_s=False`,
-`--repo_env=CUDA_COMPILER_USE_CC_TOOLCHAIN=true`, and
-`--@rules_cuda//cuda:compiler=clang`. We recommend registering the hermetic
+`--repo_env=CUDA_COMPILER_USE_CC_TOOLCHAIN=true`,
+`--@rules_cuda//cuda:compiler=clang`, and
+`--@rules_cuda//cuda:copts=-D_ALLOW_UNSUPPORTED_LIBCPP` (the CUDA headers
+otherwise reject `libc++` on x86). We recommend registering the hermetic
 `@llvm` toolchain as shown above.
 
 ## How this differs from other Bazel + LibTorch projects
@@ -214,7 +216,9 @@ each one is a stopgap we intend to drop once the fix lands upstream.
 
 | Module | Patch | Why |
 | --- | --- | --- |
-| `llvm` | `patches/llvm/*.patch` | Toolchain fixes for the hermetic LLVM module: header search paths, sanitizer runtimes, Windows `@params` files, de-duplicated `-rpath` entries, quiet MinGW `.def` preprocessing, and extracting the `System/Cryptexes` targets of macOS SDK frameworks. |
+| `llvm` | `patches/llvm/*.patch` | Toolchain fixes for the hermetic LLVM module: header search paths, sanitizer runtimes, Windows `@params` files, de-duplicated `-rpath` entries, quiet MinGW `.def` preprocessing, extracting the `System/Cryptexes` targets of macOS SDK frameworks, and building the static Windows `libc++abi` without `dllexport` annotations (otherwise every MinGW DLL re-exports the `std::` exception classes). |
 | `rules_cuda` | `patches/rules_cuda/multiplatform_redist.patch` | Map `linux-arm64` to `linux-sbsa`, gracefully disable `@cuda` on macOS hosts where NVIDIA does not publish host tools, and emit `select()` aliases across `linux-x86_64`, `linux-sbsa`, and `windows-x86_64` in `@cuda//BUILD` so CUDA targets can be cross-compiled across OS/CPU pairs. |
+| `gflags` | `patches/gflags/windows_platform.patch` | Selects gflags' Windows sources and defines by `@platforms//os:windows` instead of the legacy `--cpu=x64_windows` value, which MinGW builds never set (they failed on `<fnmatch.h>`). |
+| `cpuinfo` | `patches/cpuinfo/windows_arm64_header.patch` | Lists the private `windows-arm-init.h` header of its Windows-on-Arm backend in `srcs`, which `windows_arm64` builds need. |
 | `rules_perl` | `patches/rules_perl/windows_arm64_emulated_x86_64.patch` | Registers a `windows`/`arm64` Perl toolchain that reuses the hash-pinned `x86_64` Strawberry Perl archive under Windows-on-Arm emulation when building on `windows-11-arm` runners. |
 

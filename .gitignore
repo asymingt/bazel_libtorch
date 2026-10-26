@@ -1,5 +1,5 @@
 bazel-*
 reference
 repos
-tools
 **/MODULE.bazel.lock
+user.bazelrc

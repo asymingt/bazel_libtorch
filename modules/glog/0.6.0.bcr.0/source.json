@@ -1,0 +1,13 @@
+{
+    "integrity": "sha256-ioO/mC83u3CCXfcalwn6kOqfREf7PAmeHXIKQ52IutY=",
+    "strip_prefix": "glog-0.6.0",
+    "url": "https://github.com/google/glog/archive/refs/tags/v0.6.0.tar.gz",
+    "patch_strip": 1,
+    "patches": {
+        "bazel9_rules_cc.patch": "sha256-ju72ENtc21jcCcmt73tTrFvT1RnyQaP5LLmXpxJwirc=",
+        "internal_is_google_logging_initialized.patch": "sha256-irs+Ts0lxtW9b9En6p2V93CIUvpIe9YIxLtSXf1UM98=",
+        "mingw.patch": "sha256-7kPyFORglpZ6zx59zXGNBTEl+DpYZUsJoxZ18lMokzY=",
+        "module_dot_bazel.patch": "sha256-B8qTzbOYSRKFLBRUn9dttkSPxNQBbPOcKBeDkt0eTwc=",
+        "remove_only_the_first_leading_at.patch": "sha256-ieceuBwB5MiGzs1ES3FKKLTCuHwxxERo2clZn5h8S3g="
+    }
+}

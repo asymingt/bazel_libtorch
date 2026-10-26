@@ -1,0 +1,208 @@
+# Reusable job: analyze + build (+ test) one (host, target) pair with one
+# Bazel version. Called from pull_request.yaml for every native and cross job.
+#
+# Disk cache
+# ----------
+# The Bazel disk cache is managed here with actions/cache rather than by
+# setup-bazel. setup-bazel keys it only on MODULE.bazel / lockfile / BUILD
+# files and skips saving on an exact-key hit, so entries froze at their first
+# save and changes to .bzl files, sources or patches never reached the cache.
+#
+# Instead, every job (except `last_rc`, see save_disk_cache) saves under a
+# unique key
+#   bazel-disk-v<cache_version>-<host>-<target>-<sha>-<stage>
+# and restores the most recent entry for the same commit (so `last_rc` picks up
+# what `9.x` just produced), falling back to the most recent entry for the
+# (host, target) pair. Before saving, entries the build did not read or write
+# are pruned (Bazel refreshes mtimes on hits), so each entry holds only the
+# working set of the current commit and does not grow without bound.
+name: Bazel job
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: GitHub runner label.
+        required: true
+        type: string
+      bazel_version:
+        description: USE_BAZEL_VERSION for bazelisk (e.g. 9.x, last_rc).
+        required: true
+        type: string
+      stage:
+        description: Short, key-safe name of the Bazel version stage.
+        required: true
+        type: string
+      host:
+        description: Host <os>-<arch>.
+        required: true
+        type: string
+      target:
+        description: Target <os>-<arch> (equal to host for native jobs).
+        required: true
+        type: string
+      platform:
+        description: Value for --platforms; empty for native (auto-detected) builds.
+        required: false
+        type: string
+        default: ""
+      test:
+        description: Run `bazel test //...` after building.
+        required: false
+        type: boolean
+        default: false
+      allow_failure:
+        description: Do not fail the workflow if this job fails.
+        required: false
+        type: boolean
+        default: false
+      save_disk_cache:
+        description: Save the disk cache after building (restore always happens).
+        required: false
+        type: boolean
+        default: true
+      cache_version:
+        description: Bump to invalidate all Bazel caches.
+        required: false
+        type: string
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  bazel:
+    name: ${{ inputs.host == inputs.target && 'native' || 'cross' }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 360
+    continue-on-error: ${{ inputs.allow_failure }}
+
+    env:
+      USE_BAZEL_VERSION: ${{ inputs.bazel_version }}
+      PLATFORM_FLAG: ${{ inputs.platform != '' && format('--platforms={0}', inputs.platform) || '' }}
+      DISK_CACHE_PREFIX: bazel-disk-v${{ inputs.cache_version }}-${{ inputs.host }}-${{ inputs.target }}-
+      # Fixed forward-slash paths: Bazel's rc parser treats `\` as an escape, so
+      # runner.temp (D:\a\_temp on Windows) cannot be used in a bazelrc.
+      DISK_CACHE_DIR: ${{ startsWith(inputs.host, 'windows') && 'C:/_bzl_disk' || '/tmp/bazel-disk' }}
+      DISK_CACHE_MARKER: ${{ startsWith(inputs.host, 'windows') && 'C:/_bzl_disk_marker' || '/tmp/bazel-disk-marker' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Windows Defender's real-time scan briefly locks freshly written files,
+      # which surfaces as "Permission denied" both on disk cache entries and on
+      # just-linked DLLs that lld then opens. Exclude Bazel's trees and the
+      # disk cache.
+      - name: Exclude Bazel directories from Defender (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $paths = @('C:\_bzl', 'C:\_bazel', 'D:\_bazel', 'C:\_bzl_disk', $env:RUNNER_TEMP, $env:GITHUB_WORKSPACE)
+          Add-MpPreference -ExclusionPath $paths -ErrorAction SilentlyContinue
+          Get-MpPreference -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ExclusionPath
+
+      # Bazel's repo contents cache (extracted repos) is kept outside
+      # setup-bazel's repository cache directory (its default location), so the
+      # saved repository cache holds only downloaded archives. It must be on
+      # the same drive as the output base: Bazel moves fetched repos into it,
+      # and on Windows a cross-drive move falls back to a copy that breaks
+      # symlinks (e.g. the macOS SDK's usr/lib/libpthread.tbd). RUNNER_TEMP is
+      # on the workspace drive, which is where setup-bazel puts the output base.
+      - name: Compute Bazel paths
+        shell: bash
+        run: |
+          temp="$RUNNER_TEMP"
+          if command -v cygpath >/dev/null; then temp="$(cygpath -m "$temp")"; fi
+          echo "REPO_CONTENTS_DIR=$temp/bazel-repo-contents" >> "$GITHUB_ENV"
+
+      - name: Set up Bazel
+        uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # 0.19.1
+        with:
+          bazelisk-cache: true
+          disk-cache: false
+          repository-cache: true
+          cache-version: ${{ inputs.cache_version }}
+          # bazelisk/repository caches are keyed per runner OS/arch, so one job
+          # per runner type (the native one) saving them is enough. actions/cache
+          # archives the whole directory before finding out whether the key can
+          # still be reserved, which costs 10-30 minutes per job on Windows.
+          cache-save: ${{ inputs.host == inputs.target }}
+          bazelrc: |
+            ${{ runner.os == 'Windows' && 'startup --output_user_root=C:/_bzl' || '' }}
+            build --disk_cache=${{ env.DISK_CACHE_DIR }}
+            common --repo_contents_cache=${{ env.REPO_CONTENTS_DIR }}
+            common --config=ci
+
+      - name: Restore disk cache
+        id: restore-disk-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.DISK_CACHE_DIR }}
+          key: ${{ env.DISK_CACHE_PREFIX }}${{ github.sha }}-${{ inputs.stage }}
+          restore-keys: |
+            ${{ env.DISK_CACHE_PREFIX }}${{ github.sha }}-
+            ${{ env.DISK_CACHE_PREFIX }}
+
+      - name: Mark disk cache entries as stale
+        shell: bash
+        run: |
+          mkdir -p "${{ env.DISK_CACHE_DIR }}"
+          touch "${{ env.DISK_CACHE_MARKER }}"
+          sleep 1
+
+      - name: Bazel version
+        shell: bash
+        run: bazel version
+
+      # --config=libtorch builds //... plus every @<module>//... of the local
+      # registry (see libtorch.txt).
+      - name: Analyze (${{ inputs.host }} -> ${{ inputs.target }})
+        shell: bash
+        run: bazel build --nobuild --config=libtorch $PLATFORM_FLAG
+
+      - name: Build (${{ inputs.host }} -> ${{ inputs.target }})
+        id: build
+        shell: bash
+        run: bazel build --config=libtorch $PLATFORM_FLAG
+
+      - name: Test (${{ inputs.host }})
+        id: test
+        if: inputs.test
+        shell: bash
+        run: bazel test $PLATFORM_FLAG //...
+
+      - name: Force bazel shutdown to enable cache sync
+        if: always()
+        shell: bash
+        run: bazel shutdown
+
+      # Only prune after a complete build: after a failure, untouched entries
+      # may still be needed by actions that never got to run.
+      - name: Prune unused disk cache entries
+        if: inputs.save_disk_cache && steps.build.outcome == 'success'
+        shell: bash
+        run: |
+          dir="${{ env.DISK_CACHE_DIR }}"
+          before=$(du -sh "$dir" | cut -f1)
+          find "$dir" -type f ! -newer "${{ env.DISK_CACHE_MARKER }}" -delete
+          echo "Disk cache: $before -> $(du -sh "$dir" | cut -f1)"
+
+      # Only save after a successful build. Restore falls back to the most
+      # recent entry for the (host, target) pair, so a near-empty cache saved by
+      # a run that failed or was cancelled early would shadow the last good one.
+      # `always()` keeps saving when only the tests failed.
+      - name: Save disk cache
+        if: always() && inputs.save_disk_cache && steps.build.outcome == 'success' && steps.restore-disk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.DISK_CACHE_DIR }}
+          key: ${{ env.DISK_CACHE_PREFIX }}${{ github.sha }}-${{ inputs.stage }}
+
+      - name: Upload test logs on failure
+        if: failure() && steps.test.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: testlogs-${{ inputs.host }}-bazel${{ inputs.stage }}
+          path: bazel-testlogs/**/test.log
+          if-no-files-found: ignore

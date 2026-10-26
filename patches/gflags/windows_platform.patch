@@ -1,0 +1,18 @@
+diff --git a/BUILD b/BUILD
+index 8d92b75..0678943 100644
+--- a/BUILD
++++ b/BUILD
+@@ -9,9 +9,12 @@ exports_files([
+     "COPYING.txt",
+ ])
+ 
++# Any Windows target platform (MSVC or MinGW). The legacy --cpu=x64_windows
++# value is never set under platform-based toolchain resolution, so MinGW
++# targets were built as POSIX and failed on <fnmatch.h>.
+ config_setting(
+     name = "x64_windows",
+-    values = {"cpu": "x64_windows"},
++    constraint_values = ["@platforms//os:windows"],
+ )
+ 
+ config_setting(

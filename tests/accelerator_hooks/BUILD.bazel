@@ -1,0 +1,11 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_test(
+    name = "accelerator_hooks_test",
+    srcs = ["accelerator_hooks_test.cc"],
+    copts = ["-std=gnu++20"],
+    deps = [
+        "//tests/common:check",
+        "@libtorch//:torch",
+    ],
+)
