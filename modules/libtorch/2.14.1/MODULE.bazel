@@ -12,6 +12,7 @@ bazel_dep(name = "flatbuffers", version = "24.12.23")
 bazel_dep(name = "fmt", version = "12.2.0.bcr.1")
 bazel_dep(name = "gflags", version = "2.3.1")
 bazel_dep(name = "glog", version = "0.6.0.bcr.0")
+bazel_dep(name = "glslang", version = "16.6.0")
 bazel_dep(name = "ittapi", version = "3.26.3")
 bazel_dep(name = "kineto", version = "0.0.0-20260805-15f4784")
 bazel_dep(name = "llvm", version = "0.8.25")
@@ -23,6 +24,8 @@ bazel_dep(name = "rules_cuda", version = "0.3.0")
 bazel_dep(name = "rules_license", version = "1.0.0")
 bazel_dep(name = "rules_python", version = "1.8.5")
 bazel_dep(name = "sleef", version = "3.8.0")
+bazel_dep(name = "volk", version = "1.4.341.0")
+bazel_dep(name = "vulkan-memory-allocator", version = "3.3.0")
 
 # The CUDA toolkit (@cuda), as configured by the root module's
 # cuda.redist_json()/cuda.toolkit() (see README.md).

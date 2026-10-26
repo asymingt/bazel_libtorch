@@ -4,6 +4,9 @@ load("@rules_python//python:py_library.bzl", "py_library")
 
 package(default_applicable_licenses = ["//:license"])
 
+# Upstream's Vulkan shader generator (see //:libtorch_codegen.bzl).
+exports_files(["gen_vulkan_spv.py"])
+
 # Used by windows_def_file() in //:libtorch_config.bzl.
 cc_binary(
     name = "def_filter",
@@ -35,6 +38,9 @@ py_binary(
     srcs = ["libtorch_codegen_main.py"],
     main = "libtorch_codegen_main.py",
     python_version = "3.12",
+    # Only ever built for the exec platform (as a tool), not by
+    # `bazel build @libtorch//...` for the target platform.
+    tags = ["manual"],
     visibility = ["//:__subpackages__"],
     deps = [
         ":codegen_tools",

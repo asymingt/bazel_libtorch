@@ -8,10 +8,10 @@ hermetic Python toolchain:
   lazy tensor TorchScript backend).
 
 Nothing generated is checked in. Bazel needs the outputs up front, so they are
-listed below, without per-operator headers (upstream's
-AT_PER_OPERATOR_HEADERS mode, whose ~3,000 file names depend on
-native_functions.yaml). `python -m torchgen.gen ... -o <file>` prints the list
-that torchgen writes, for when it changes.
+listed below, except for the ~7,000 per-operator headers (aten/src/ATen/ops,
+upstream's AT_PER_OPERATOR_HEADERS mode), whose names depend on
+native_functions.yaml: they are one directory output. `python -m torchgen.gen
+... -o <file>` prints the list that torchgen writes, for when it changes.
 """
 
 # torchgen.gen outputs, relative to aten/src/ATen.
@@ -104,6 +104,27 @@ ATEN_GENERATED_CUDA_KERNEL_SOURCES = [
     "UfuncCUDA_add.cu",
 ]
 
+# With --mps (on :mps_enabled targets only: it also changes the declarations
+# in NativeFunctions.h and RegistrationDeclarations.h).
+ATEN_GENERATED_MPS_HEADERS = [
+    "MPSFunctions.h",
+    "MPSFunctions_inl.h",
+    "SparseCsrMPSFunctions.h",
+    "SparseCsrMPSFunctions_inl.h",
+    "SparseMPSFunctions.h",
+    "SparseMPSFunctions_inl.h",
+]
+
+ATEN_GENERATED_MPS_SOURCES = [
+    "RegisterMPS_0.cpp",
+    "RegisterSparseCsrMPS_0.cpp",
+    "RegisterSparseMPS_0.cpp",
+]
+
+AOTI_GENERATED_MPS_SOURCES = [
+    "torch/csrc/inductor/aoti_torch/generated/c_shim_mps.cpp",
+]
+
 # torchgen.gen outputs elsewhere in the tree.
 TORCHGEN_OTHER_HEADERS = [
     "torch/headeronly/core/enum_tag.h",
@@ -145,24 +166,33 @@ AUTOGRAD_GENERATED_SOURCES = [
 ]
 
 def _codegen_impl(ctx):
+    # A path ending in "/" is a directory of outputs (a tree artifact).
     outputs = {
-        group: [ctx.actions.declare_file(path) for path in paths]
+        group: [
+            ctx.actions.declare_directory(path[:-1]) if path.endswith("/") else ctx.actions.declare_file(path)
+            for path in paths
+        ]
         for group, paths in ctx.attr.output_groups.items()
     }
     source_root = ctx.label.workspace_root or "."
     bin_root = ctx.bin_dir.path + ("/" + ctx.label.workspace_root if ctx.label.workspace_root else "")
     all_outputs = [f for files in outputs.values() for f in files]
     outputs_file = ctx.actions.declare_file(ctx.label.name + ".outputs")
-    ctx.actions.write(outputs_file, "\n".join([f.path for f in all_outputs]) + "\n")
+    ctx.actions.write(outputs_file, "\n".join([f.path for f in all_outputs if not f.is_directory]) + "\n")
+    tool = ctx.attr.tool[DefaultInfo].files_to_run if ctx.attr.tool else None
     arguments = [
         ctx.attr.module,
         source_root,
         bin_root,
         outputs_file.path,
-    ] + ctx.attr.arguments
+    ] + [
+        argument.replace("{tool}", "{execroot}/" + tool.executable.path) if tool else argument
+        for argument in ctx.attr.arguments
+    ]
     ctx.actions.run(
         executable = ctx.executable._codegen,
         arguments = arguments,
+        tools = [tool] if tool else [],
         inputs = ctx.files.srcs + [outputs_file],
         outputs = all_outputs,
         mnemonic = ctx.attr.mnemonic,
@@ -183,9 +213,14 @@ _codegen = rule(
         "module": attr.string(mandatory = True, doc = "The generator's Python module."),
         "output_groups": attr.string_list_dict(
             mandatory = True,
-            doc = "Outputs (relative to the package) by output group.",
+            doc = "Outputs (relative to the package) by output group; a path ending in / is a directory.",
         ),
         "srcs": attr.label_list(allow_files = True, doc = "Inputs of the generator."),
+        "tool": attr.label(
+            cfg = "exec",
+            executable = True,
+            doc = "A tool that the generator runs; {tool} in `arguments` is its path.",
+        ),
         "_codegen": attr.label(
             default = "//tools:codegen",
             executable = True,
@@ -197,14 +232,26 @@ _codegen = rule(
 def _aten(paths):
     return ["aten/src/ATen/" + path for path in paths]
 
-def libtorch_aten_codegen(name):
+def libtorch_aten_codegen(name, mps_enabled):
     """Runs torchgen.gen. Output groups: headers, sources, cpu_kernel_sources,
-    cuda_headers, cuda_sources, cuda_kernel_sources, aoti_sources and
-    aoti_cuda_sources.
+    cuda_headers, cuda_sources, cuda_kernel_sources, aoti_sources,
+    aoti_cuda_sources, and where `mps_enabled` holds, mps_headers, mps_sources
+    and aoti_mps_sources.
 
     Args:
         name: Name of the target.
+        mps_enabled: The config_setting under which the MPS backend is built.
     """
+    output_groups = {
+        "aoti_cuda_sources": AOTI_GENERATED_CUDA_SOURCES,
+        "aoti_sources": AOTI_GENERATED_SOURCES,
+        "cpu_kernel_sources": _aten(ATEN_GENERATED_CPU_KERNEL_SOURCES),
+        "cuda_headers": _aten(ATEN_GENERATED_CUDA_HEADERS),
+        "cuda_kernel_sources": _aten(ATEN_GENERATED_CUDA_KERNEL_SOURCES),
+        "cuda_sources": _aten(ATEN_GENERATED_CUDA_SOURCES),
+        "headers": _aten(ATEN_GENERATED_HEADERS) + TORCHGEN_OTHER_HEADERS + ["aten/src/ATen/ops/"],
+        "sources": _aten(ATEN_GENERATED_SOURCES),
+    }
     _codegen(
         name = name,
         srcs = native.glob([
@@ -216,19 +263,21 @@ def libtorch_aten_codegen(name):
             "--install-dir={bin}/aten/src/ATen",
             "--aoti-install-dir={bin}/torch/csrc/inductor/aoti_torch/generated",
             "--headeronly-install-dir={bin}/torch/headeronly/core",
-        ],
+            "--per-operator-headers",
+        ] + select({
+            mps_enabled: ["--mps"],
+            "//conditions:default": [],
+        }),
         mnemonic = "TorchGen",
         module = "torchgen.gen",
-        output_groups = {
-            "aoti_cuda_sources": AOTI_GENERATED_CUDA_SOURCES,
-            "aoti_sources": AOTI_GENERATED_SOURCES,
-            "cpu_kernel_sources": _aten(ATEN_GENERATED_CPU_KERNEL_SOURCES),
-            "cuda_headers": _aten(ATEN_GENERATED_CUDA_HEADERS),
-            "cuda_kernel_sources": _aten(ATEN_GENERATED_CUDA_KERNEL_SOURCES),
-            "cuda_sources": _aten(ATEN_GENERATED_CUDA_SOURCES),
-            "headers": _aten(ATEN_GENERATED_HEADERS) + TORCHGEN_OTHER_HEADERS,
-            "sources": _aten(ATEN_GENERATED_SOURCES),
-        },
+        output_groups = select({
+            mps_enabled: output_groups | {
+                "aoti_mps_sources": AOTI_GENERATED_MPS_SOURCES,
+                "mps_headers": _aten(ATEN_GENERATED_MPS_HEADERS),
+                "mps_sources": _aten(ATEN_GENERATED_MPS_SOURCES),
+            },
+            "//conditions:default": output_groups,
+        }),
     )
 
 def libtorch_autograd_codegen(name):
@@ -252,6 +301,8 @@ def libtorch_autograd_codegen(name):
             "--tags-path=aten/src/ATen/native/tags.yaml",
             "--subset=libtorch",
             "--gen-lazy-ts-backend",
+            # Like ATen (see libtorch_aten_codegen).
+            "--per-operator-headers",
         ],
         mnemonic = "AutogradGen",
         module = "tools.setup_helpers.generate_code",
@@ -259,4 +310,77 @@ def libtorch_autograd_codegen(name):
             "headers": AUTOGRAD_GENERATED_HEADERS,
             "sources": AUTOGRAD_GENERATED_SOURCES,
         },
+    )
+
+def libtorch_metallib_headers(name, srcs, deps):
+    """Embeds Metal shaders in headers, like upstream's CMake build without a
+    Metal compiler (cmake/Metal.cmake: metal_to_metallib_h), which then
+    compiles them at runtime (PYTORCH_JIT_COMPILE_SHADERS).
+
+    For each <dir>/<stem>.metal, generates
+    aten/src/ATen/native/mps/<stem>_metallib.h with
+    scripts/write_metallib_headers.py. No proprietary Apple tool is needed, so
+    this works on any host.
+
+    Args:
+        name: Name of a filegroup holding the generated headers.
+        srcs: The .metal shaders.
+        deps: The headers that the shaders include (embedded in the output).
+    """
+    headers = []
+    for src in srcs:
+        stem = src.rsplit("/", 1)[-1][:-len(".metal")]
+        header = "aten/src/ATen/native/mps/{}_metallib.h".format(stem)
+        _codegen(
+            name = "{}_{}".format(name, stem),
+            srcs = [src] + deps + [
+                "scripts/write_metallib_headers.py",
+                "torch/utils/_cpp_embed_headers.py",
+            ],
+            arguments = [
+                src,
+                "{bin}/" + header,
+            ],
+            mnemonic = "MetallibHeader",
+            module = "scripts/write_metallib_headers.py",
+            output_groups = {"headers": [header]},
+        )
+        headers.append("{}_{}".format(name, stem))
+    native.filegroup(
+        name = name,
+        srcs = headers,
+    )
+
+def libtorch_vulkan_spv(name, target_compatible_with = None):
+    """Compiles the Vulkan backend's GLSL compute shaders to SPIR-V and embeds
+    them in vulkan/ATen/native/vulkan/spv.cpp (cmake/VulkanCodegen.cmake),
+    with tools/gen_vulkan_spv.py and glslang's glslc-compatible compiler.
+
+    Args:
+        name: Name of the target. Output group: sources.
+        target_compatible_with: Where the Vulkan backend is built.
+    """
+    _codegen(
+        name = name,
+        srcs = native.glob([
+            "aten/src/ATen/native/vulkan/glsl/*.glsl",
+            "aten/src/ATen/native/vulkan/glsl/*.h",
+            "aten/src/ATen/native/vulkan/glsl/*.yaml",
+        ]) + ["//tools:gen_vulkan_spv.py"],
+        arguments = [
+            "--glsl-path=aten/src/ATen/native/vulkan/glsl",
+            "--output-path={bin}/vulkan/ATen/native/vulkan",
+            "--glslc-path={tool}",
+            "--tmp-dir-path={bin}/vulkan/spv",
+            "--env",
+            "FLOAT_IMAGE_FORMAT=rgba32f",
+        ],
+        mnemonic = "VulkanSpv",
+        module = "tools/gen_vulkan_spv.py",
+        # Only spv.cpp: in this version, the generator writes no spv.h.
+        output_groups = {
+            "sources": ["vulkan/ATen/native/vulkan/spv.cpp"],
+        },
+        target_compatible_with = target_compatible_with,
+        tool = "@glslang//:glslc",
     )

@@ -1,0 +1,15 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_test(
+    name = "mps_dispatch_test",
+    srcs = ["mps_dispatch_test.cc"],
+    copts = ["-std=gnu++20"],
+    target_compatible_with = select({
+        "@libtorch//:mps_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "//tests/common:check",
+        "@libtorch//:torch",
+    ],
+)

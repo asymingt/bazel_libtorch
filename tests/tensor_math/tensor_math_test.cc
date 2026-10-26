@@ -13,29 +13,29 @@ namespace {
 
 void TestFactories() {
   const torch::Tensor a = torch::arange(6, torch::kFloat32).reshape({2, 3});
-  CHECK(a.sizes() == torch::IntArrayRef({2, 3}));
-  CHECK(a[1][2].item<float>() == 5.0f);
-  CHECK(torch::eye(4).sum().item<float>() == 4.0f);
+  EXPECT(a.sizes() == torch::IntArrayRef({2, 3}));
+  EXPECT(a[1][2].item<float>() == 5.0f);
+  EXPECT(torch::eye(4).sum().item<float>() == 4.0f);
   torch::manual_seed(0);
   const torch::Tensor r = torch::randn({1000});
-  CHECK(std::abs(r.mean().item<float>()) < 0.2f);
-  CHECK(std::abs(r.std().item<float>() - 1.0f) < 0.2f);
+  EXPECT(std::abs(r.mean().item<float>()) < 0.2f);
+  EXPECT(std::abs(r.std().item<float>() - 1.0f) < 0.2f);
 }
 
 void TestMatmul() {
   const torch::Tensor a = torch::arange(6, torch::kFloat32).reshape({2, 3});
   const torch::Tensor b = torch::arange(12, torch::kFloat32).reshape({3, 4});
   const torch::Tensor c = torch::matmul(a, b);
-  CHECK(c.sizes() == torch::IntArrayRef({2, 4}));
+  EXPECT(c.sizes() == torch::IntArrayRef({2, 4}));
   // Row 1 of a is (3, 4, 5); column 3 of b is (3, 7, 11).
-  CHECK(c[1][3].item<float>() == 3 * 3 + 4 * 7 + 5 * 11);
+  EXPECT(c[1][3].item<float>() == 3 * 3 + 4 * 7 + 5 * 11);
   // A larger product against a naive reference.
   torch::manual_seed(1);
   const torch::Tensor x = torch::randn({64, 48}, torch::kFloat64);
   const torch::Tensor y = torch::randn({48, 32}, torch::kFloat64);
   const torch::Tensor reference = (x.unsqueeze(2) * y.unsqueeze(0)).sum(1);
-  CHECK(torch::allclose(torch::matmul(x, y), reference));
-  CHECK(torch::allclose(torch::eye(5, torch::kFloat64).matmul(x.narrow(0, 0, 5)), x.narrow(0, 0, 5)));
+  EXPECT(torch::allclose(torch::matmul(x, y), reference));
+  EXPECT(torch::allclose(torch::eye(5, torch::kFloat64).matmul(x.narrow(0, 0, 5)), x.narrow(0, 0, 5)));
 }
 
 void TestFFT() {
@@ -45,10 +45,10 @@ void TestFFT() {
   const torch::Tensor spectrum = torch::fft::fft(signal);
   // A cosine at bin 3 has energy n/2 at bins 3 and n-3 only.
   const torch::Tensor magnitude = spectrum.abs();
-  CHECK(std::abs(magnitude[3].item<double>() - n / 2.0) < 1e-9);
-  CHECK(std::abs(magnitude[n - 3].item<double>() - n / 2.0) < 1e-9);
-  CHECK(std::abs(magnitude.sum().item<double>() - n) < 1e-9);
-  CHECK(torch::allclose(torch::real(torch::fft::ifft(spectrum)), signal));
+  EXPECT(std::abs(magnitude[3].item<double>() - n / 2.0) < 1e-9);
+  EXPECT(std::abs(magnitude[n - 3].item<double>() - n / 2.0) < 1e-9);
+  EXPECT(std::abs(magnitude.sum().item<double>() - n) < 1e-9);
+  EXPECT(torch::allclose(torch::real(torch::fft::ifft(spectrum)), signal));
 }
 
 void TestTranscendentals() {
@@ -65,7 +65,7 @@ void TestTranscendentals() {
     max_error = std::max<float>(max_error, std::abs(erf[i].item<float>() - std::erf(v)));
   }
   std::printf("max error of sin/exp/erf: %g\n", max_error);
-  CHECK(max_error < 1e-5f);
+  EXPECT(max_error < 1e-5f);
 }
 
 }  // namespace

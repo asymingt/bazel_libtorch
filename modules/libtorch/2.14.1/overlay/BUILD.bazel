@@ -6,7 +6,7 @@ load("@rules_cc//cc:cc_shared_library.bzl", "cc_shared_library")
 load("@rules_cuda//cuda:defs.bzl", "cuda_library")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_python//python:py_library.bzl", "py_library")
-load(":libtorch_codegen.bzl", "libtorch_aten_codegen", "libtorch_autograd_codegen")
+load(":libtorch_codegen.bzl", "libtorch_aten_codegen", "libtorch_autograd_codegen", "libtorch_metallib_headers", "libtorch_vulkan_spv")
 load(":libtorch_config.bzl", "LIBTORCH_COPTS", "libtorch_cpu_config_headers", "libtorch_cuda_config_headers", "libtorch_generated_headers", "windows_def_file")
 load(":libtorch_sources.bzl", "ATEN_CPU_EXCLUDES", "ATEN_CPU_GLOBS", "ATEN_CPU_KERNEL_GLOBS", "ATEN_CUDA_GLOBS", "ATEN_CUDA_KERNEL_GLOBS", "C10_CUDA_SOURCES", "TORCH_CPU_ITT_SOURCES", "TORCH_CPU_SOURCES", "TORCH_CUDA_SOURCES", "TORCH_HEADER_GLOBS")
 
@@ -191,7 +191,10 @@ py_library(
     ],
 )
 
-libtorch_aten_codegen(name = "aten_generated")
+libtorch_aten_codegen(
+    name = "aten_generated",
+    mps_enabled = ":mps_enabled",
+)
 
 libtorch_autograd_codegen(name = "autograd_generated")
 
@@ -231,15 +234,26 @@ cc_library(
     includes = ["third_party/concurrentqueue"],
 )
 
-# MinGW-w64 compatibility for upstream code written for MSVC: mixed-case
-# Windows SDK headers (e.g. <Windows.h>) forwarding to MinGW-w64's lowercase
-# ones, c10_mingw_compat.h (force-included into :c10 on Windows), and the
-# aligned allocation functions of mimalloc.h.
+# MinGW-w64 compatibility for upstream code written for MSVC or glibc:
+# mixed-case Windows SDK headers (e.g. <Windows.h>) forwarding to MinGW-w64's
+# lowercase ones, and <assert.h> with glibc's __assert_fail(). Public, as
+# upstream's public headers need it too.
 cc_library(
     name = "mingw_compat",
+    srcs = ["mingw/src/assert_fail.c"],
     hdrs = glob(["mingw/include/*.h"]),
     includes = ["mingw/include"],
     target_compatible_with = ["@platforms//os:windows"],
+)
+
+# For @libtorch's own sources only: libtorch_mingw_compat.h (force-included
+# on Windows) and the aligned allocation functions of mimalloc.h.
+cc_library(
+    name = "mingw_compat_private",
+    hdrs = glob(["mingw/private/*.h"]),
+    includes = ["mingw/private"],
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [":mingw_compat"],
 )
 
 cc_library(
@@ -250,7 +264,7 @@ cc_library(
     copts = LIBTORCH_COPTS + select({
         "@platforms//os:windows": [
             "-include",
-            "c10_mingw_compat.h",
+            "libtorch_mingw_compat.h",
         ],
         "//conditions:default": [],
     }),
@@ -260,7 +274,7 @@ cc_library(
         "@fmt",
         "@nlohmann_json//:json",
     ] + select({
-        "@platforms//os:windows": [":mingw_compat"],
+        "@platforms//os:windows": [":mingw_compat_private"],
         "//conditions:default": [],
     }),
     includes = ["."],
@@ -284,7 +298,7 @@ cc_library(
         "SUPPORTS_BACKTRACE=0",
     ] + select({
         # Like upstream on Windows. The CPU allocator's mi_malloc_aligned() and
-        # mi_free() come from mingw/include/mimalloc.h (see there).
+        # mi_free() come from mingw/private/mimalloc.h (see there).
         "@platforms//os:windows": ["USE_MIMALLOC"],
         "//conditions:default": [],
     }),
@@ -293,7 +307,10 @@ cc_library(
         ":headeronly",
         "@gflags",
         "@glog",
-    ],
+    ] + select({
+        "@platforms//os:windows": [":mingw_compat"],
+        "//conditions:default": [],
+    }),
 )
 
 # c10 is built without C10_BUILD_SHARED_LIBS (no __declspec(dllexport)), so on
@@ -336,12 +353,15 @@ libtorch_cpu_config_headers(name = "torch_cpu_config_headers")
     for generated, groups in [
         ("aten_generated", [
             "aoti_cuda_sources",
+            "aoti_mps_sources",
             "aoti_sources",
             "cpu_kernel_sources",
             "cuda_headers",
             "cuda_kernel_sources",
             "cuda_sources",
             "headers",
+            "mps_headers",
+            "mps_sources",
             "sources",
         ]),
         ("autograd_generated", [
@@ -389,6 +409,17 @@ cc_library(
         ],
         "@platforms//cpu:aarch64": ["AT_BUILD_ARM_VEC256_WITH_SLEEF"],
         "//conditions:default": [],
+    }) + select({
+        # Upstream defines it for the whole build (CMAKE_CXX_FLAGS).
+        ":mps_enabled": ["USE_MPS"],
+        "//conditions:default": [],
+    }) + select({
+        # Likewise (CMAKE_CXX_FLAGS).
+        ":vulkan_enabled": [
+            "USE_VULKAN",
+            "USE_VULKAN_API",
+        ],
+        "//conditions:default": [],
     }),
     includes = [
         ".",
@@ -406,10 +437,27 @@ cc_library(
     ],
 )
 
+# On Windows, libtorch_mingw_compat.h is force-included (see there).
+_MINGW_COMPAT_COPTS = select({
+    "@platforms//os:windows": [
+        "-include",
+        "libtorch_mingw_compat.h",
+    ],
+    "//conditions:default": [],
+})
+
+_MINGW_COMPAT_DEPS = select({
+    "@platforms//os:windows": [":mingw_compat_private"],
+    "//conditions:default": [],
+})
+
 # Compile definitions that upstream's CMake build sets for all of torch_cpu
 # (cmake/Dependencies.cmake, the top-level CMakeLists.txt and
 # caffe2/CMakeLists.txt).
 TORCH_CPU_LOCAL_DEFINES = [
+    # torchgen generates per-operator headers (ATen/ops/*.h), like upstream's
+    # default USE_PER_OPERATOR_HEADERS, which some sources (e.g. MPS) need.
+    "AT_PER_OPERATOR_HEADERS",
     "CAFFE2_BUILD_MAIN_LIB",
     "MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS",
     "USE_EXTERNAL_MZCRC",
@@ -472,7 +520,7 @@ _CPU_CAPABILITIES = {
     cc_library(
         name = "aten_cpu_kernels_" + capability.lower(),
         srcs = glob(ATEN_CPU_KERNEL_GLOBS) + [":aten_generated_cpu_kernel_sources"],
-        copts = LIBTORCH_COPTS + flags,
+        copts = LIBTORCH_COPTS + flags + _MINGW_COMPAT_COPTS,
         local_defines = TORCH_CPU_LOCAL_DEFINES + [
             "CPU_CAPABILITY=" + capability,
             "CPU_CAPABILITY_" + capability,
@@ -484,7 +532,7 @@ _CPU_CAPABILITIES = {
         deps = [
             ":torch_cpu_headers",
             "@cpuinfo",
-        ],
+        ] + _MINGW_COMPAT_DEPS,
         alwayslink = True,
     )
     for capability, (platform, flags) in _CPU_CAPABILITIES.items()
@@ -535,7 +583,7 @@ cc_library(
         "@platforms//cpu:x86_64": TORCH_CPU_ITT_SOURCES,
         "//conditions:default": [],
     }),
-    copts = LIBTORCH_COPTS,
+    copts = LIBTORCH_COPTS + _MINGW_COMPAT_COPTS,
     implementation_deps = [
         ":pocketfft",
         "//third_party/miniz-3.0.2:miniz",
@@ -544,7 +592,7 @@ cc_library(
     ] + select({
         "@platforms//cpu:x86_64": ["@ittapi//:ittnotify"],
         "//conditions:default": [],
-    }),
+    }) + _MINGW_COMPAT_DEPS,
     local_defines = TORCH_CPU_LOCAL_DEFINES + select({
         "@platforms//cpu:x86_64": ["USE_ITT"],
         "//conditions:default": [],
@@ -569,7 +617,186 @@ cc_library(
             ":caffe2_perfkernels_sve",
         ],
         "//conditions:default": [],
+    }) + select({
+        ":mps_enabled": [":torch_cpu_mps"],
+        "//conditions:default": [],
+    }) + select({
+        ":vulkan_enabled": [":torch_cpu_vulkan"],
+        "//conditions:default": [],
     }),
+    alwayslink = True,
+)
+
+# -----------------------------------------------------------------------------
+# Apple MPS (Metal Performance Shaders), in torch_cpu where :mps_enabled holds
+# (aten/src/ATen/CMakeLists.txt, caffe2/CMakeLists.txt).
+# -----------------------------------------------------------------------------
+
+# The Metal shaders, embedded as sources (see libtorch_metallib_headers).
+libtorch_metallib_headers(
+    name = "mps_metallib_headers",
+    srcs = glob([
+        "aten/src/ATen/native/mps/kernels/*.metal",
+        "aten/src/ATen/native/sparse/mps/kernels/*.metal",
+    ]),
+    deps = glob([
+        "aten/src/ATen/native/mps/kernels/*.h",
+        "c10/metal/*.h",
+    ]),
+)
+
+_MPS_COMPATIBLE = select({
+    ":mps_enabled": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
+_MPS_FRAMEWORKS = [
+    "-framework",
+    "Accelerate",
+    "-framework",
+    "CoreFoundation",
+    "-framework",
+    "Foundation",
+    "-framework",
+    "IOKit",
+    "-framework",
+    "Metal",
+    "-framework",
+    "MetalPerformanceShaders",
+    "-framework",
+    "MetalPerformanceShadersGraph",
+]
+
+# The Objective-C++ (.mm) sources. rules_cc's cc_library does not accept .mm
+# files, so they are compiled from copies with Clang's -x objective-c++ (none
+# of them includes a header relative to its own directory).
+_MPS_OBJCXX_SRCS = glob([
+    "aten/src/ATen/mps/*.mm",
+    "aten/src/ATen/native/mps/**/*.mm",
+    "aten/src/ATen/native/sparse/mps/*.mm",
+]) + ["torch/csrc/inductor/aoti_torch/shim_mps.mm"]
+
+[
+    copy_file(
+        name = "mps_objcxx_" + src[:-len(".mm")].replace("/", "_"),
+        src = src,
+        out = "mps_objcxx/{}.cc".format(src[:-len(".mm")]),
+    )
+    for src in _MPS_OBJCXX_SRCS
+]
+
+cc_library(
+    name = "torch_cpu_mps_objcxx",
+    srcs = [
+        ":mps_objcxx_" + src[:-len(".mm")].replace("/", "_")
+        for src in _MPS_OBJCXX_SRCS
+    ],
+    # Upstream compiles its Objective-C++ without ARC.
+    copts = LIBTORCH_COPTS + [
+        "-x",
+        "objective-c++",
+        "-fno-objc-arc",
+    ],
+    linkopts = _MPS_FRAMEWORKS,
+    # The shaders are compiled at runtime, as without a Metal compiler.
+    local_defines = TORCH_CPU_LOCAL_DEFINES + ["PYTORCH_JIT_COMPILE_SHADERS"],
+    target_compatible_with = _MPS_COMPATIBLE,
+    deps = [
+        ":c10",
+        ":mps_headers",
+        ":torch_cpu_headers",
+    ],
+    # MPSHooks, the MPS allocator and the MPS kernels register themselves at
+    # static initialization.
+    alwayslink = True,
+)
+
+cc_library(
+    name = "mps_headers",
+    hdrs = glob(["c10/metal/*.h"]) + [
+        ":aten_generated_mps_headers",
+        ":mps_metallib_headers",
+    ],
+    includes = [
+        ".",
+        "aten/src",
+    ],
+    target_compatible_with = _MPS_COMPATIBLE,
+)
+
+cc_library(
+    name = "torch_cpu_mps",
+    srcs = glob([
+        "aten/src/ATen/mps/*.cpp",
+        "aten/src/ATen/native/mps/**/*.cpp",
+    ]) + [
+        "torch/csrc/inductor/aoti_runner/model_container_runner_mps.cpp",
+        "torch/csrc/inductor/aoti_torch/shim_mps.cpp",
+        "torch/csrc/mps/shim_common.cpp",
+        ":aten_generated_aoti_mps_sources",
+        ":aten_generated_mps_sources",
+    ],
+    copts = LIBTORCH_COPTS,
+    linkopts = _MPS_FRAMEWORKS,
+    local_defines = TORCH_CPU_LOCAL_DEFINES + ["PYTORCH_JIT_COMPILE_SHADERS"],
+    target_compatible_with = _MPS_COMPATIBLE,
+    deps = [
+        ":c10",
+        ":mps_headers",
+        ":torch_cpu_headers",
+        ":torch_cpu_mps_objcxx",
+    ],
+    alwayslink = True,
+)
+
+# -----------------------------------------------------------------------------
+# Vulkan compute (USE_VULKAN), in torch_cpu where :vulkan_enabled holds
+# (aten/src/ATen/CMakeLists.txt, cmake/VulkanCodegen.cmake).
+# -----------------------------------------------------------------------------
+
+# The compute shaders, compiled to SPIR-V (vulkan/ATen/native/vulkan/spv.cpp).
+libtorch_vulkan_spv(
+    name = "vulkan_spv",
+    target_compatible_with = select({
+        ":vulkan_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+filegroup(
+    name = "vulkan_spv_sources",
+    srcs = [":vulkan_spv"],
+    output_group = "sources",
+)
+
+cc_library(
+    name = "torch_cpu_vulkan",
+    srcs = glob([
+        "aten/src/ATen/native/vulkan/*.cpp",
+        "aten/src/ATen/native/vulkan/api/*.cpp",
+        "aten/src/ATen/native/vulkan/impl/*.cpp",
+        "aten/src/ATen/native/vulkan/ops/*.cpp",
+    ]) + [":vulkan_spv_sources"],
+    copts = LIBTORCH_COPTS + _MINGW_COMPAT_COPTS,
+    # The Vulkan loader is loaded at runtime by volk (USE_VULKAN_VOLK), so no
+    # Vulkan library is needed at link time and binaries run without one
+    # (at::is_vulkan_available() is then false). Upstream's USE_VULKAN_WRAPPER
+    # alternative needs the Android NDK's vulkan_wrapper.
+    local_defines = TORCH_CPU_LOCAL_DEFINES + [
+        "USE_VULKAN_VOLK",
+        "USE_VULKAN_WRAPPER",
+    ],
+    target_compatible_with = select({
+        ":vulkan_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":torch_cpu_headers",
+        "@volk",
+        "@vulkan-memory-allocator//:vulkan_memory_allocator",
+    ] + _MINGW_COMPAT_DEPS,
+    # The shaders and the Vulkan operators register themselves at static
+    # initialization.
     alwayslink = True,
 )
 
@@ -612,6 +839,9 @@ cc_library(
         # <nvml.h> (c10/cuda/driver_api.h); libnvidia-ml is loaded at runtime.
         "@cuda//:nvml_headers",
     ],
+    # c10/cuda/impl/CUDAGuardImpl.cpp registers the CUDA device guard at
+    # static initialization (C10_REGISTER_GUARD_IMPL).
+    alwayslink = True,
 )
 
 # The CUDA libraries that torch_cuda links (all but the runtime load the
@@ -622,6 +852,8 @@ _CUDA_LIBRARIES = [
     "@cuda//:curand",
     "@cuda//:cusolver",
     "@cuda//:cusparse",
+    # libnvJitLink, which cuSOLVER and cuSPARSE load (in their runfiles).
+    "@cuda//:nvjitlink",
     "@cuda//:nvrtc",
     "@cuda//:nvtx3",
 ]
@@ -632,15 +864,50 @@ TORCH_CUDA_LOCAL_DEFINES = [
     "USE_MEM_EFF_ATTENTION",
 ]
 
+# CMAKE_CUDA_FLAGS of upstream's build (cmake/Dependencies.cmake).
+_CUDA_KERNEL_DEFINES = [
+    # CUB in its own namespace, so other CUDA libraries' CUB cannot clash.
+    "CUB_WRAPPED_NAMESPACE=at_cuda_detail",
+    "CUDA_HAS_FP16=1",
+    "DISABLE_CUSPARSE_DEPRECATED",
+    # c10::Half and c10::BFloat16 provide the arithmetic and conversions, so
+    # the CUDA headers' own operators would make them ambiguous.
+    "__CUDA_NO_BFLOAT16_CONVERSIONS__",
+    "__CUDA_NO_HALF2_OPERATORS__",
+    "__CUDA_NO_HALF_CONVERSIONS__",
+    "__CUDA_NO_HALF_OPERATORS__",
+    # nvcc's version macros, which Clang does not define, but CUTLASS needs
+    # (cutlass/arch/config.h enables its SM90 kernels by them). 12.6 rather
+    # than the 12.8 of the redistributables: from 12.8 on, CUTLASS uses nvcc
+    # builtins that Clang lacks (__nv_atomic_load_n in subbyte_reference.h).
+    "__CUDACC_VER_MAJOR__=12",
+    "__CUDACC_VER_MINOR__=6",
+]
+
+# torchgen's CUDA headers (ATen/CUDAFunctions.h).
+cc_library(
+    name = "aten_cuda_generated_headers",
+    hdrs = [":aten_generated_cuda_headers"],
+    includes = ["aten/src"],
+    target_compatible_with = _CUDA_COMPATIBLE,
+)
+
 # ATen's device code (ATen_CUDA_CU_SRCS).
 cuda_library(
     name = "aten_cuda_kernels",
     srcs = glob(ATEN_CUDA_KERNEL_GLOBS, allow_empty = True) + [":aten_generated_cuda_kernel_sources"],
-    copts = LIBTORCH_COPTS,
+    # Device code is always optimized, as nvcc does unless asked for device
+    # debug info (-G): unoptimized CUTLASS kernels make ptxas take tens of
+    # minutes and gigabytes per file (e.g. RowwiseScaledMM.cu).
+    copts = LIBTORCH_COPTS + [
+        "-Xarch_device",
+        "-O3",
+    ],
     host_copts = LIBTORCH_COPTS,
-    local_defines = TORCH_CPU_LOCAL_DEFINES + TORCH_CUDA_LOCAL_DEFINES,
+    local_defines = TORCH_CPU_LOCAL_DEFINES + TORCH_CUDA_LOCAL_DEFINES + _CUDA_KERNEL_DEFINES,
     target_compatible_with = _CUDA_COMPATIBLE,
     deps = [
+        ":aten_cuda_generated_headers",
         ":c10_cuda",
         ":torch_cpu_headers",
         "@cuda//:cub",
@@ -657,12 +924,12 @@ cc_library(
         ":aten_generated_aoti_cuda_sources",
         ":aten_generated_cuda_sources",
     ],
-    hdrs = [":aten_generated_cuda_headers"],
     copts = LIBTORCH_COPTS,
     local_defines = TORCH_CPU_LOCAL_DEFINES + TORCH_CUDA_LOCAL_DEFINES,
     target_compatible_with = _CUDA_COMPATIBLE,
     visibility = ["//visibility:public"],
     deps = [
+        ":aten_cuda_generated_headers",
         ":aten_cuda_kernels",
         ":c10_cuda",
         ":torch_cpu",

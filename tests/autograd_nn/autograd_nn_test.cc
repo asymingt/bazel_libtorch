@@ -26,14 +26,14 @@ int main() {
     if (step == 0) {
       first_loss = loss.item<float>();
       for (const auto& parameter : model->parameters()) {
-        CHECK(parameter.grad().defined());
-        CHECK(parameter.grad().abs().sum().item<float>() > 0.0f);
+        EXPECT(parameter.grad().defined());
+        EXPECT(parameter.grad().abs().sum().item<float>() > 0.0f);
       }
     }
     optimizer.step();
     last_loss = loss.item<float>();
   }
   std::printf("loss: %f -> %f\n", first_loss, last_loss);
-  CHECK(last_loss < 0.5f * first_loss);
+  EXPECT(last_loss < 0.5f * first_loss);
   return test::Finish("autograd_nn_test");
 }

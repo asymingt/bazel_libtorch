@@ -24,7 +24,12 @@ common --@rules_cuda//cuda:compiler=clang
 # against.
 common --@rules_cuda//cuda:copts=-D_ALLOW_UNSUPPORTED_LIBCPP
 
-# Clang 21 knows CUDA up to 12.8, and warns that 12.8.1 is "newer".
+# Clang detects the CUDA version from <cuda-path>/include/cuda.h, which the
+# nvcc redistributable that rules_cuda passes as --cuda-path does not have
+# (cuda.h is in cudart). Clang then warns, assumes the newest CUDA it knows and
+# emits that release's PTX ISA, which ptxas 12.8 rejects. Pin CUDA 12.8's PTX
+# ISA (8.7); update it with the CUDA version in MODULE.bazel.
+common --@rules_cuda//cuda:copts=--cuda-feature=+ptx87
 common --@rules_cuda//cuda:copts=-Wno-unknown-cuda-version
 
 # GPU architectures that cuda_library() targets are compiled for: cubins for

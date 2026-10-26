@@ -20,6 +20,8 @@ cuda_library(
 cc_test(
     name = "hello_world_test",
     srcs = ["main.cc"],
+    # Runs on this machine's GPU (if any), never on a remote executor.
+    tags = ["no-remote-exec"],
     copts = ["-std=gnu++20"],
     local_defines = select({
         "@libtorch//:cuda_enabled": ["HELLO_WORLD_HAS_CUDA"],

@@ -183,6 +183,11 @@ ATEN_CUDA_GLOBS = [
     "aten/src/ATen/cuda/tunable/*.cpp",
     "aten/src/ATen/native/cuda/*.cpp",
     "aten/src/ATen/native/cuda/linalg/*.cpp",
+    # Always built: without cuDNN (AT_CUDNN_ENABLED() is 0) or ROCm they
+    # define stubs.
+    "aten/src/ATen/native/cudnn/*.cpp",
+    "aten/src/ATen/native/miopen/*.cpp",
+    "aten/src/ATen/native/quantized/cudnn/*.cpp",
     "aten/src/ATen/native/nested/cuda/*.cpp",
     "aten/src/ATen/native/quantized/cuda/*.cpp",
     "aten/src/ATen/native/sparse/cuda/*.cpp",

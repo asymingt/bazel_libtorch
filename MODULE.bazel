@@ -21,6 +21,7 @@ single_version_override(
         "//patches:llvm/mingw_def_extra_tokens.patch",
         "//patches:llvm/osx_cryptex_frameworks.patch",
         "//patches:llvm/libcxxabi_windows_static_visibility.patch",
+        "//patches:llvm/libcxx_split_buffer_pointer_swap.patch",
     ],
     version = "0.8.25",
 )
@@ -31,7 +32,7 @@ single_version_override(
 # `--platforms` we can compile for; it mirrors the CPUs (X86, AArch64) and GPU
 # device targets (NVPTX for CUDA, AMDGPU for ROCm/HIP) that LibTorch ships.
 llvm = use_extension("@llvm//extensions:llvm.bzl", "llvm")
-llvm.version(llvm_version = "21.1.8")
+llvm.version(llvm_version = "23.1.2")
 llvm.configure(
     targets = [
         "AArch64",
@@ -45,6 +46,28 @@ use_repo(llvm, "llvm-project")
 register_toolchains(
     "@llvm//toolchain:all",
     dev_dependency = True,
+)
+
+# The macOS SDK frameworks that @libtorch links: MPS (Metal Performance
+# Shaders) on macos_arm64, and Accelerate.
+osx = use_extension("@llvm//extensions:osx.bzl", "osx")
+osx.frameworks(
+    names = [
+        "Accelerate",
+        "CFNetwork",
+        "CoreFoundation",
+        "CoreGraphics",
+        "CoreServices",
+        "DiskArbitration",
+        "Foundation",
+        "IOKit",
+        "IOSurface",
+        "Metal",
+        "MetalPerformancePrimitives",
+        "MetalPerformanceShaders",
+        "MetalPerformanceShadersGraph",
+        "Security",
+    ],
 )
 
 # CUDA rules and the hermetic CUDA 12.8.1 redistributables. The patch maps

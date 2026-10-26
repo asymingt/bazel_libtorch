@@ -3,12 +3,14 @@
 Usage: libtorch_codegen_main.py <module> <source root> <bin root> <outputs file>
            [arguments...]
 
-Runs `python -m <module> [arguments...]` from <source root> (the root of the
+Runs `python -m <module> [arguments...]` (or `python <module>` if it is a .py
+file relative to <source root>) from <source root> (the root of the
 PyTorch source tree in the execroot), because upstream's generators resolve
 some inputs relative to the current directory (e.g. generate_code.py's
 torch/csrc/lazy/ts_backend/ts_native_functions.cpp). Every "{bin}" in the
 arguments is replaced with the absolute path of <bin root> (the source root's
-counterpart in the bin directory), where the outputs go.
+counterpart in the bin directory), where the outputs go, and every
+"{execroot}" with the absolute path of the execroot (e.g. for tools).
 
 Some generators embed their output directory in what they write (e.g. the lazy
 tensor generator's `#include <{output dir}/LazyIr.h>`), so afterwards the
@@ -27,12 +29,18 @@ def main():
     bin_root = os.path.join(execroot, bin_root)
     with open(outputs_file) as f:
         outputs = [os.path.join(execroot, line.strip()) for line in f if line.strip()]
-    arguments = [a.replace("{bin}", bin_root) for a in arguments]
+    arguments = [
+        a.replace("{bin}", bin_root).replace("{execroot}", execroot)
+        for a in arguments
+    ]
 
     os.chdir(source_root)
     sys.argv = [module] + arguments
     try:
-        runpy.run_module(module, run_name="__main__", alter_sys=True)
+        if module.endswith(".py"):
+            runpy.run_path(module, run_name="__main__")
+        else:
+            runpy.run_module(module, run_name="__main__", alter_sys=True)
     except SystemExit as e:
         if e.code not in (None, 0):
             raise

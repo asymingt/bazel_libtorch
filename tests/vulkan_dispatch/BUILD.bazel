@@ -1,0 +1,17 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_test(
+    name = "vulkan_dispatch_test",
+    srcs = ["vulkan_dispatch_test.cc"],
+    copts = ["-std=gnu++20"],
+    # Runs on this machine's Vulkan driver (if any), never on a remote executor.
+    tags = ["no-remote-exec"],
+    target_compatible_with = select({
+        "@libtorch//:vulkan_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "//tests/common:check",
+        "@libtorch//:torch",
+    ],
+)

@@ -17,16 +17,17 @@ void TestOnGpu() {
 
   const torch::Tensor a = torch::randn({128, 64});
   const torch::Tensor b = torch::randn({64, 32});
-  CHECK(torch::allclose(torch::matmul(a.to(cuda), b.to(cuda)).cpu(),
+  EXPECT(torch::allclose(torch::matmul(a.to(cuda), b.to(cuda)).cpu(),
                         torch::matmul(a, b), 1e-3, 1e-3));
 
+  // cuSOLVER's SVD reconstructs its input (the CPU has no LAPACK to compare
+  // against: AT_BUILD_WITH_LAPACK() is 0).
   const torch::Tensor m = torch::randn({16, 8}, torch::kFloat64);
-  const torch::Tensor s_cuda = std::get<1>(torch::linalg_svd(m.to(cuda), false));
-  const torch::Tensor s_cpu = torch::linalg_svdvals(m);
-  CHECK(torch::allclose(s_cuda.cpu(), s_cpu));
+  const auto [u, s, vh] = torch::linalg_svd(m.to(cuda), false);
+  EXPECT(torch::allclose(torch::matmul(u * s.unsqueeze(0), vh).cpu(), m));
 
   const torch::Tensor signal = torch::randn({256}, torch::kFloat64);
-  CHECK(torch::allclose(torch::fft::fft(signal.to(cuda)).cpu(),
+  EXPECT(torch::allclose(torch::fft::fft(signal.to(cuda)).cpu(),
                         torch::fft::fft(signal)));
 
   // (batch, heads, sequence, head dimension), on the memory-efficient kernel.
@@ -38,15 +39,15 @@ void TestOnGpu() {
       at::_scaled_dot_product_efficient_attention(
           q.to(cuda), k.to(cuda), v.to(cuda), std::nullopt,
           /*compute_log_sumexp=*/false);
-  CHECK(torch::allclose(output.cpu(), expected, 1e-3, 1e-3));
+  EXPECT(torch::allclose(output.cpu(), expected, 1e-3, 1e-3));
 }
 
 }  // namespace
 
 int main() {
   // CUDAHooks and the CUDA kernels are linked and registered.
-  CHECK(at::hasCUDA() || !torch::cuda::is_available());
-  CHECK(at::detail::getCUDAHooks().hasCUDART());
+  EXPECT(at::hasCUDA() || !torch::cuda::is_available());
+  EXPECT(at::detail::getCUDAHooks().hasCUDART());
 
   // Must not crash without a GPU or driver.
   const bool available = torch::cuda::is_available();

@@ -1,4 +1,4 @@
-// Minimal assertion helpers for the smoke tests: CHECK() records a failure and
+// Minimal assertion helpers for the smoke tests: EXPECT() records a failure and
 // keeps going, so one run reports every broken check.
 #pragma once
 
@@ -23,10 +23,10 @@ inline int Finish(const char* name) {
 
 }  // namespace test
 
-#define CHECK(cond)                                                       \
+#define EXPECT(cond)                                                       \
   do {                                                                    \
     if (!(cond)) {                                                        \
-      std::fprintf(stderr, "%s:%d: CHECK failed: %s\n", __FILE__, __LINE__, \
+      std::fprintf(stderr, "%s:%d: EXPECT failed: %s\n", __FILE__, __LINE__, \
                    #cond);                                                \
       ++::test::Failures();                                               \
     }                                                                     \
