@@ -1,0 +1,4 @@
+# Bazel registry overlay files are verified by sha256 on every platform,
+# so never convert line endings on checkout (Windows autocrlf would break
+# every overlay hash in modules/).
+* text=auto eol=lf

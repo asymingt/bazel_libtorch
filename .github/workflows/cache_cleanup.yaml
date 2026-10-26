@@ -1,0 +1,36 @@
+# Delete a pull request's Actions caches once it is closed (merged or not).
+#
+# Caches saved by a PR run are scoped to refs/pull/<n>/merge and can only ever
+# be restored by that PR, so after it closes they just occupy the repository's
+# cache quota until GitHub evicts them. Shared caches live on main (see
+# pull_request.yaml).
+#
+# pull_request_target runs this workflow from main with a token that may delete
+# caches, also for PRs from forks; it never checks out or runs PR code.
+name: Cache cleanup
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  delete-pr-caches:
+    name: Delete caches of PR #${{ github.event.pull_request.number }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Delete caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REF: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          ids=$(gh cache list --ref "$REF" --limit 1000 --json id --jq '.[].id')
+          count=0
+          for id in $ids; do
+            gh cache delete "$id"
+            count=$((count + 1))
+          done
+          echo "Deleted $count cache entries for $REF"

@@ -1,0 +1,20 @@
+# Native Linux platform.
+#
+# Inherits the auto-detected OS/CPU from @platforms//host (so one target covers
+# both amd64 and arm64) and pins the glibc version. Without this, an unpinned
+# Linux build carries `libc:unconstrained`, which the @llvm toolchain maps to
+# its 2.28 floor. Selected via `build:linux --platforms=//platforms:linux` in
+# .bazelrc (auto-applied on Linux by --enable_platform_specific_config); it is
+# equivalent to @llvm//platforms:linux_<host-arch>_gnu.2.34.
+#
+# macOS and Windows need no counterpart: all other @llvm constraint settings
+# have defaults, so @platforms//host already resolves correctly there.
+
+platform(
+    name = "linux",
+    constraint_values = [
+        "@llvm//constraints/libc:gnu.2.34",
+    ],
+    parents = ["@platforms//host"],
+    visibility = ["//visibility:public"],
+)
