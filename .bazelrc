@@ -34,9 +34,15 @@ common --@rules_cuda//cuda:copts=-Wno-unknown-cuda-version
 
 # GPU architectures that cuda_library() targets are compiled for: cubins for
 # Volta (V100), Turing (T4), Ampere (A100, RTX 30xx), Ada (RTX 40xx, L4) and
-# Hopper (H100), plus compute_90 PTX for newer GPUs to JIT. For quicker local
-# builds, override it in user.bazelrc with just your GPU's (e.g. sm_89).
-common --@rules_cuda//cuda:archs=sm_70;sm_75;sm_80;sm_86;sm_89;sm_90;compute_90
+# Hopper (H100), plus sm_90 PTX for newer GPUs to JIT. Unlike nvcc, Clang
+# embeds uncompressed PTX for every --cuda-gpu-arch by default; restrict PTX
+# to sm_90 and compress the fatbinaries. For quicker local builds, override
+# cuda:archs in user.bazelrc with just your GPU's (e.g. sm_89).
+common --@rules_cuda//cuda:archs=sm_70;sm_75;sm_80;sm_86;sm_89;sm_90
+common --@rules_cuda//cuda:copts=--no-cuda-include-ptx=all
+common --@rules_cuda//cuda:copts=--cuda-include-ptx=sm_90
+common --@rules_cuda//cuda:copts=-Xcuda-fatbinary
+common --@rules_cuda//cuda:copts=--compress-all
 
 # Third-party (non-LibTorch) dependencies -- glog, gflags, fmt, cpuinfo, the
 # CUDA redistributables, ... -- are not ours to fix, and their warnings bury

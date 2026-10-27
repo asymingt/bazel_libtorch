@@ -920,10 +920,17 @@ cc_library(
         "c10/cuda/**/*.cuh",
         "c10/cuda/**/*.h",
     ], allow_empty = True) + [":cuda_config_headers"],
+    additional_linker_inputs = select({
+        "@platforms//os:linux": [":fatbin.lds"],
+        "//conditions:default": [],
+    }),
     copts = LIBTORCH_COPTS,
     includes = ["."],
     linkopts = select({
-        "@platforms//os:linux": ["-ldl"],
+        "@platforms//os:linux": [
+            "-ldl",
+            "-Wl,-T,$(execpath :fatbin.lds)",
+        ],
         "//conditions:default": [],
     }),
     local_defines = [
@@ -1142,8 +1149,12 @@ cc_library(
     name = "c10_hip",
     srcs = [":hipified_c10"],
     additional_compiler_inputs = [":hipified_headers"],
+    additional_linker_inputs = [":fatbin.lds"],
     copts = LIBTORCH_COPTS + _HIP_COMPAT_COPTS + hip_include_copts(":hipified_headers", HIP_SOURCE_DIRS),
-    linkopts = ["-ldl"],
+    linkopts = [
+        "-ldl",
+        "-Wl,-T,$(execpath :fatbin.lds)",
+    ],
     local_defines = _ROCM_DEFINES + ["C10_CUDA_BUILD_MAIN_LIB"],
     target_compatible_with = _ROCM_COMPATIBLE,
     deps = [
