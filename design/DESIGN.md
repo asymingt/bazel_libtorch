@@ -15,6 +15,7 @@
 - **[PHASE3.md](PHASE3.md):** NVIDIA CUDA Backend (`@libtorch//:c10_cuda` & `@libtorch//:torch_cuda`)
 - **[PHASE4.md](PHASE4.md):** Multi-Vendor GPU Backends — AMD (`ROCm/HIP`), Intel (`XPU` & `Vulkan`), Apple (`MPS/Metal`), and Mobile (`NNAPI`)
 - **[PHASE5.md](PHASE5.md):** Performance, Quantization, Profiling & Distributed Ecosystem (`@xnnpack`, `@fbgemm`, `@kineto`, `@gloo`)
+- **[PROGRESS.md](PROGRESS.md):** What has been built across all phases, deviations from this plan, and open work.
 
 ---
 

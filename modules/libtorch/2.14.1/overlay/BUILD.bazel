@@ -731,6 +731,11 @@ cc_library(
 # (aten/src/ATen/CMakeLists.txt, caffe2/CMakeLists.txt).
 # -----------------------------------------------------------------------------
 
+_MPS_COMPATIBLE = select({
+    ":mps_enabled": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
 # The Metal shaders, embedded as sources (see libtorch_metallib_headers).
 libtorch_metallib_headers(
     name = "mps_metallib_headers",
@@ -742,12 +747,8 @@ libtorch_metallib_headers(
         "aten/src/ATen/native/mps/kernels/*.h",
         "c10/metal/*.h",
     ]),
+    target_compatible_with = _MPS_COMPATIBLE,
 )
-
-_MPS_COMPATIBLE = select({
-    ":mps_enabled": [],
-    "//conditions:default": ["@platforms//:incompatible"],
-})
 
 _MPS_FRAMEWORKS = [
     "-framework",

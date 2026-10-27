@@ -117,6 +117,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The Linux images leave ~20 GB free, which the CUDA and ROCm archives,
+      # their extracted repositories and the restored disk cache exceed. Remove
+      # preinstalled toolchains that nothing here uses.
+      - name: Free disk space (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
+            /usr/share/swift /usr/local/julia* /opt/microsoft /opt/google
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h /
+
       # Windows Defender's real-time scan briefly locks freshly written files,
       # which surfaces as "Permission denied" both on disk cache entries and on
       # just-linked DLLs that lld then opens. Exclude Bazel's trees and the

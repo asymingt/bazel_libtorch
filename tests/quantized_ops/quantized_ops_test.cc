@@ -1,5 +1,10 @@
 // Quantized INT8 operators on FBGEMM (USE_FBGEMM): a quantized linear layer
 // and max pooling, checked against their float counterparts.
+//
+// FBGEMM's INT8 GEMM (PackBMatrix) has only x86 kernels: on AArch64 it is
+// built for its FP16/FP32 kernels, and upstream runs quantized linear layers
+// there on QNNPACK or oneDNN, neither of which is built yet. So the linear
+// layer is only checked on x86_64.
 
 #include <ATen/Context.h>
 #include <ATen/core/dispatch/Dispatcher.h>
@@ -27,6 +32,7 @@ int main() {
   at::globalContext().setQEngine(at::QEngine::FBGEMM);
   torch::manual_seed(0);
 
+#if defined(__x86_64__) || defined(_M_X64)
   // y = x W^T + b, with x quantized to quint8 and W to qint8.
   const torch::Tensor x = torch::rand({8, 32});
   const torch::Tensor w = torch::randn({16, 32}) * 0.1;
@@ -42,6 +48,7 @@ int main() {
   const double linear_error = (qy.dequantize() - expected).abs().max().item<double>();
   std::printf("quantized linear: max error %g (output scale %g)\n", linear_error, y_scale);
   EXPECT(linear_error < 4 * y_scale);
+#endif
 
   // Max pooling commutes with (monotonic) quantization.
   const torch::Tensor image = torch::rand({1, 3, 8, 8});

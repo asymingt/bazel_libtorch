@@ -31,7 +31,9 @@ int main() {
   EXPECT(!at::detail::getCUDAHooks().hasCUDA());
   EXPECT(!at::detail::getHIPHooks().hasHIP());
   EXPECT(!at::detail::getXPUHooks().hasXPU());
+#ifndef TEST_MPS_ENABLED
   EXPECT(!at::detail::getMPSHooks().hasMPS());
+#endif
   EXPECT(!at::detail::getHPUHooks().isAvailable());
   EXPECT(!at::detail::getMTIAHooks().isAvailable());
   EXPECT(!at::detail::getXLAHooks().hasXLA());

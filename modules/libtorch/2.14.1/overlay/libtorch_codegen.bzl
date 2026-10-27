@@ -197,6 +197,9 @@ def _codegen_impl(ctx):
         outputs = all_outputs,
         mnemonic = ctx.attr.mnemonic,
         progress_message = "Generating %{label}",
+        # Upstream's scripts open files without an encoding, which on Windows
+        # defaults to the ANSI code page and fails on non-ASCII sources.
+        env = {"PYTHONUTF8": "1"},
     )
     return [
         DefaultInfo(files = depset(all_outputs)),
@@ -317,7 +320,7 @@ def libtorch_autograd_codegen(name):
         },
     )
 
-def libtorch_metallib_headers(name, srcs, deps):
+def libtorch_metallib_headers(name, srcs, deps, target_compatible_with = None):
     """Embeds Metal shaders in headers, like upstream's CMake build without a
     Metal compiler (cmake/Metal.cmake: metal_to_metallib_h), which then
     compiles them at runtime (PYTORCH_JIT_COMPILE_SHADERS).
@@ -331,6 +334,7 @@ def libtorch_metallib_headers(name, srcs, deps):
         name: Name of a filegroup holding the generated headers.
         srcs: The .metal shaders.
         deps: The headers that the shaders include (embedded in the output).
+        target_compatible_with: Constraints for the generated targets.
     """
     headers = []
     for src in srcs:
@@ -349,11 +353,13 @@ def libtorch_metallib_headers(name, srcs, deps):
             mnemonic = "MetallibHeader",
             module = "scripts/write_metallib_headers.py",
             output_groups = {"headers": [header]},
+            target_compatible_with = target_compatible_with,
         )
         headers.append("{}_{}".format(name, stem))
     native.filegroup(
         name = name,
         srcs = headers,
+        target_compatible_with = target_compatible_with,
     )
 
 def libtorch_vulkan_spv(name, target_compatible_with = None):
