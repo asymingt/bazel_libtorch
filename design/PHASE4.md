@@ -1,6 +1,28 @@
 # PHASE 4: Multi-Vendor GPU Backends — AMD (`ROCm/HIP`), Intel (`XPU` & `Vulkan`), Apple (`MPS/Metal`), and Mobile (`NNAPI`)
 
-> **Status:** Planned (follows [PHASE3.md](PHASE3.md)). Extends `@libtorch` beyond NVIDIA CUDA to build and cross-compile **AMD ROCm/HIP** (`:c10_hip`, `:torch_hip`), **Intel Data Center & Arc GPUs** (`:c10_xpu`, `:torch_xpu` + `Vulkan` compute), and **Apple Silicon GPUs** (`MPS` / `Metal` in `:torch_cpu` on `macos_arm64`) using `hermetic-llvm` Clang 21 and `libglvnd`-style link-time stub modules in `./modules/`.
+> **Status:** In progress (follows [PHASE3.md](PHASE3.md)). Extends `@libtorch` beyond NVIDIA CUDA to build and cross-compile **AMD ROCm/HIP** (`:c10_hip`, `:torch_hip`), **Intel Data Center & Arc GPUs** (`:c10_xpu`, `:torch_xpu` + `Vulkan` compute), and **Apple Silicon GPUs** (`MPS` / `Metal` in `:torch_cpu` on `macos_arm64`) using `hermetic-llvm` Clang and lazily-forwarding library shim modules in `./modules/`.
+
+## 0. Progress and Decisions (2026-10-26)
+
+| Backend | State |
+| :--- | :--- |
+| Vulkan | Done: `//tests/vulkan_dispatch` passes on `linux_x86_64` (on a real GPU) and cross-builds for `windows_amd64`. |
+| Apple MPS | Done: `//tests/mps_dispatch` cross-builds for `macos_arm64`. |
+| AMD ROCm/HIP | Done (`--config=rocm`, `linux_x86_64`): `//tests/hip_smoke` and `//tests/hip_dispatch` pass without an AMD GPU; not yet run on one. |
+| Intel XPU | Done, runtime only (`--config=xpu`, `linux_x86_64`): `//tests/xpu_dispatch` passes; never finds a device (see 3.4). |
+
+Decisions that supersede sections 2 and 3:
+
+- **ROCm 7.14.1** (`therock-7.14.1` tags of `ROCm/rocm-systems`, `ROCm/rocm-libraries` and `ROCm/llvm-project`), not 6.3.2: PyTorch 2.14.1 has `ROCM_VERSION >= 71400` code paths. AMD's prebuilt TheRock tarballs (2.7-9.5 GB per GPU family, ROCm 10.x only on the stable channel) were rejected in favour of building from these sources.
+- **Three modules** instead of `@rocm_device_libs` + `@hip_stub`, because each module has one source archive:
+  - `@rocm-device-libs` (`ROCm/llvm-project` `amd/device-libs`): the AMDGPU bitcode (`ocml`, `ockl`, `oclc_*` for every GPU, ...), compiled per source file by the toolchain's Clang, and linked by a small `utils/link-builtins` tool (`llvm-link` + `prepare-builtins`) because `@llvm`'s patched `llvm-link` treats its own `argv[0]` as an input file.
+  - `@hip-stub` (`ROCm/rocm-systems`): HIP and AMD SMI headers, shims of `libamdhip64.so.7` and `libhiprtc.so.7`, and `:hip_sdk`, a ROCm directory for Clang (`--rocm-path=$(execpath @hip-stub//:hip_sdk) -B$(execpath @hip-stub//:hip_sdk)/bin`). Upstream Clang 23 uses the new offload driver, whose tools (`clang-linker-wrapper`, `clang-offload-bundler`, `llvm-offload-binary`, `lld`) the prebuilt `@llvm` toolchain lacks; `:hip_sdk` builds them from `@llvm-project`.
+  - `@rocm-libraries-stub` (`ROCm/rocm-libraries`): rocPRIM, hipCUB, rocThrust and the rocRAND/hipRAND device APIs (header-only), and headers plus shims of rocBLAS, rocSOLVER, hipBLAS, hipBLASLt, hipSOLVER, hipSPARSE, hipFFT and MIOpen (which a ROCm build always uses: `aten/src/ATen/native/miopen` is enabled by `AT_ROCM_ENABLED()`). `@hip-stub` also provides `rocm-core/rocm_version.h` and a `libroctx64.so.4` shim (the profiler's annotations).
+- **Shims instead of link-time stubs**: each shim (`@hip-stub//bazel:gen_shim.py`) has the real library's SONAME and symbol versions, and forwards every call to the real library (found under `ROCM_PATH`, `/opt/rocm` or `LD_LIBRARY_PATH`) on first use, so one binary runs kernels on AMD GPUs and reports zero devices elsewhere. Linux x86_64 only for now (Windows needs DLL shims).
+- `//tests/hip_smoke` verifies the toolchain: kernels for `gfx90a`, `gfx942` and `gfx1100` embedded in one binary, and every library shim reporting errors without ROCm.
+- **`--@libtorch//:gpu=cuda|rocm|xpu|none`** (default `cuda`; `--config=rocm`, `--config=xpu`) replaces `enable_cuda`/`enable_rocm`/`enable_xpu`: one discrete GPU backend per build; `--@libtorch//:rocm_archs` (default `gfx90a,gfx942,gfx1100`) selects the GPUs. `tools/libtorch_hipify.py` hipifies the CUDA backend in one action into a header tree (taking precedence over the original headers with `-I`) and source trees for `:c10_hip`, `:torch_hip_kernels` (`-x hip`) and `:torch_hip`. `:torch_cpu` is the same for every GPU backend (no `USE_ROCM`, as it has no `USE_CUDA`).
+- `rocm/libtorch_hip_compat.h` is force-included into the ROCm sources for what upstream gets from libstdc++ but not from libc++: libc++'s `__config` before HIP's `__noinline__` macro, and HIP's `__device__ memcpy`/`memset` in namespace `std`.
+- **ROCm and CUDA are mutually exclusive** for `@libtorch`: `hipify` rewrites ~150 existing files in place (e.g. `torch/headeronly/macros/Macros.h`, `torch/csrc/cuda/*`) in addition to generating ~700 `hip/` files, and `torch_cpu` itself is compiled with `USE_ROCM`. A ROCm build therefore needs its own build configuration on `linux_x86_64`.
 
 ---
 
@@ -110,6 +132,14 @@ In addition to `XPU`, PyTorch includes a full **Vulkan compute backend** (`c10::
 - **Zero-Driver Link Dependency (`USE_VULKAN_WRAPPER=1`):**
   - PyTorch's `aten/src/ATen/native/vulkan/api/vk_api.h` supports `-DUSE_VULKAN_WRAPPER=1`, which uses `aten/src/ATen/native/vulkan/wrapper/ vulkan_wrapper.cpp` (`dlopen("libvulkan.so.1")` on Linux, `LoadLibraryA("vulkan-1.dll")` on Windows) together with `@vulkan_headers` (`1.4.349` from BCR) and `@vulkan_memory_allocator`!
   - Thus `USE_VULKAN=1` requires **no system `libvulkan.so` at link time** and works out-of-the-box on Linux and Windows.
+
+### 3.4 XPU Scope (decided 2026-10-26)
+
+The in-tree XPU sources are runtime plumbing: nearly all XPU kernels live in the separate `torch-xpu-ops` repository (SYCL device code), and the in-tree oneDNN-based operators (`aten/src/ATen/native/mkldnn/xpu`, `native/transformers/xpu`) need oneDNN's SYCL GPU runtime, which needs a `-fsycl` compiler that upstream Clang does not provide. XPU is therefore limited to `:c10_xpu` and `:torch_xpu` (`aten/src/ATen/xpu`, and AOTInductor's XPU shim and runner):
+
+- `@sycl-stub` (intel/llvm `v7.2.0`, oneAPI 2026.2: `SYCL_COMPILER_VERSION=20260200`): the SYCL and Unified Runtime API headers (compiled as host C++, without `-fsycl`, as upstream compiles these sources), and a `libsycl.so.9` stub. Intel's `libsycl` is built for libstdc++, and its C++ API passes `std::string`, `std::vector` and `std::shared_ptr`, so libc++-built code cannot call it: unlike the ROCm shims, the stub never loads the real library. `sycl::platform::get_platforms()` returns no platforms (and `sycl::exception` works); every other function aborts (`bazel/sycl_symbols.bzl`). So `at::hasXPU()` holds and `torch::xpu::device_count()` is always 0, even with an Intel GPU and oneAPI installed.
+- `@opencl-headers` (`v2025.07.22`, as DPC++ pins) and `@level-zero` (`v1.35.0`, headers only: `ATen/xpu/detail/LazyLevelZero.cpp` loads the loader at runtime).
+- An XPU that runs on Intel GPUs would need intel/llvm's SYCL runtime and Unified Runtime built from source against libc++ (for memory and copies only), and its SYCL compiler for `torch-xpu-ops` (for operators).
 
 ---
 

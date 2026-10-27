@@ -232,7 +232,7 @@ _codegen = rule(
 def _aten(paths):
     return ["aten/src/ATen/" + path for path in paths]
 
-def libtorch_aten_codegen(name, mps_enabled):
+def libtorch_aten_codegen(name, mps_enabled, rocm_enabled):
     """Runs torchgen.gen. Output groups: headers, sources, cpu_kernel_sources,
     cuda_headers, cuda_sources, cuda_kernel_sources, aoti_sources,
     aoti_cuda_sources, and where `mps_enabled` holds, mps_headers, mps_sources
@@ -241,6 +241,8 @@ def libtorch_aten_codegen(name, mps_enabled):
     Args:
         name: Name of the target.
         mps_enabled: The config_setting under which the MPS backend is built.
+        rocm_enabled: The config_setting under which the CUDA outputs are
+            generated for ROCm (with HIP includes, --rocm).
     """
     output_groups = {
         "aoti_cuda_sources": AOTI_GENERATED_CUDA_SOURCES,
@@ -266,6 +268,9 @@ def libtorch_aten_codegen(name, mps_enabled):
             "--per-operator-headers",
         ] + select({
             mps_enabled: ["--mps"],
+            "//conditions:default": [],
+        }) + select({
+            rocm_enabled: ["--rocm"],
             "//conditions:default": [],
         }),
         mnemonic = "TorchGen",
@@ -383,4 +388,61 @@ def libtorch_vulkan_spv(name, target_compatible_with = None):
         },
         target_compatible_with = target_compatible_with,
         tool = "@glslang//:glslc",
+    )
+
+# The directories that tools/libtorch_hipify.py reads (its _INPUT_DIRS).
+_HIPIFY_INPUT_DIRS = [
+    "aten/src/ATen/cuda",
+    "aten/src/ATen/hip",
+    "aten/src/ATen/native/cuda",
+    "aten/src/ATen/native/cudnn",
+    "aten/src/ATen/native/hip",
+    "aten/src/ATen/native/nested/cuda",
+    "aten/src/ATen/native/quantized/cuda",
+    "aten/src/ATen/native/quantized/cudnn",
+    "aten/src/ATen/native/sparse/cuda",
+    "aten/src/ATen/native/transformers/cuda",
+    "aten/src/ATen/native/transformers/hip",
+    "c10/cuda",
+    "c10/hip",
+    "torch/csrc",
+    "torch/headeronly",
+]
+
+def libtorch_hipify(name, torch_sources, target_compatible_with = None):
+    """Hipifies the CUDA backend for ROCm (tools/libtorch_hipify.py).
+
+    Args:
+        name: Name of the target. Output groups (each a directory): headers
+            (every hipified header), c10 (c10_hip's sources), host and device
+            (torch_hip's host and device sources).
+        torch_sources: torch/csrc sources of torch_hip, hipified in place.
+        target_compatible_with: Where ROCm is built.
+    """
+    _codegen(
+        name = name,
+        srcs = native.glob([
+            d + "/**/*" + ext
+            for d in _HIPIFY_INPUT_DIRS
+            for ext in [".cpp", ".cu", ".cuh", ".h", ".hip", ".hpp", ".inl"]
+        ], allow_empty = True) + native.glob(["torch/utils/hipify/*.py"]) + [
+            "aten/src/ATen/cuda/CUDAConfig.h.in",
+            "c10/cuda/impl/cuda_cmake_macros.h.in",
+            "//tools:libtorch_hipify.py",
+        ],
+        arguments = [
+            "--out-headers={bin}/hip/headers",
+            "--out-c10={bin}/hip/c10",
+            "--out-host={bin}/hip/host",
+            "--out-device={bin}/hip/device",
+        ] + ["--torch-source=" + src for src in torch_sources],
+        mnemonic = "Hipify",
+        module = "tools/libtorch_hipify.py",
+        output_groups = {
+            "c10": ["hip/c10/"],
+            "device": ["hip/device/"],
+            "headers": ["hip/headers/"],
+            "host": ["hip/host/"],
+        },
+        target_compatible_with = target_compatible_with,
     )

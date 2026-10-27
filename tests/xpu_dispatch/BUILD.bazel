@@ -1,0 +1,16 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+# Only where @libtorch//:torch includes torch_xpu (--config=xpu).
+cc_test(
+    name = "xpu_dispatch_test",
+    srcs = ["xpu_dispatch_test.cc"],
+    copts = ["-std=gnu++20"],
+    target_compatible_with = select({
+        "@libtorch//:xpu_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "//tests/common:check",
+        "@libtorch//:torch",
+    ],
+)

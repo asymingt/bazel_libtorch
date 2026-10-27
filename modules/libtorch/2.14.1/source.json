@@ -3,14 +3,15 @@
     "strip_prefix": "pytorch-2.14.1",
     "url": "https://github.com/pytorch/pytorch/archive/refs/tags/v2.14.1.tar.gz",
     "overlay": {
-        "BUILD.bazel": "sha256-BlgHY1TwDfy606VSqBPSzci2zMRJIaZhposYvMSfLxg=",
-        "MODULE.bazel": "sha256-edMozwPGgm2zl6VDrnIV0kIlspH2e+a5RVxWEl6lB1s=",
+        "BUILD.bazel": "sha256-KA5z2Bvv7BTwf+d7IAfaxl0X7mN95dcd8YavzHux2PY=",
+        "MODULE.bazel": "sha256-l6XCU88IoYT857UrOUFU/LjNQ017JtkyvdSgnn/RNuY=",
         "bazel/BUILD.bazel": "sha256-tOgkCn9XjIG16myz0hjiTGzX2vr6hAEnTF8b0Mg2TY8=",
         "bazel/pyyaml.BUILD.bazel": "sha256-ccotaORlyHpMJ6N5k3/tXyHF9BRbqzYM1kXihsL3nVI=",
         "bazel/src/export_without_onnx.cpp": "sha256-0uonkZu3k6VJWed2JbemjFYsVJpfTY9FJo8w5GFaGjo=",
         "bazel/typing_extensions.BUILD.bazel": "sha256-CgSt+IoBwKUESgo6kcxLHF0j2bh6HHHX/LDp4GH3qWE=",
-        "libtorch_codegen.bzl": "sha256-JUIz09qRUfYT/jurlQD35VK0adz+vOfDDtw3nXe/EbI=",
+        "libtorch_codegen.bzl": "sha256-VrpC7h5QBbpIeNW6T2GpZ/LurJYWSlXzbJW10BcTC54=",
         "libtorch_config.bzl": "sha256-qT9TGhA8TKKFefxiPGBLXWDcT/tjQLlyRWMS7F97aWQ=",
+        "libtorch_hip.bzl": "sha256-R/kne76SD9j9Pu5RpW0tVn/2REIqF+/fd2N1KMs+ua0=",
         "libtorch_sources.bzl": "sha256-Q6/G2fm2Qtmt/m824G8ZHDltyJHgjMcmigw+9T3MUfY=",
         "mingw/include/WinError.h": "sha256-6aSED494wtIYqc1ii7Q2z8yC6TsYmUk1jHo7FJzj3eY=",
         "mingw/include/Windows.h": "sha256-PrcUBnkPaHxX3J3zH/YNNvQpPQx1XOU8yIXL273W4J8=",
@@ -18,9 +19,11 @@
         "mingw/private/libtorch_mingw_compat.h": "sha256-jduspNw3Jn+HV5x8/cG8+/r5yeOBwPWLccPG6A5hDto=",
         "mingw/private/mimalloc.h": "sha256-0JZNj+Js8v7KitDVQO5DfhQK+ISuT5IvvqTWoOr9/Jk=",
         "mingw/src/assert_fail.c": "sha256-lZ49q+MfriFl1lA54lWpCkevNu/jBkhuVP/XKe3KhFQ=",
+        "rocm/libtorch_hip_compat.h": "sha256-XjqRC4g1mrOFxN08fi89bn+hh8Y03Zn6PWnsHeNLXr8=",
         "third_party/miniz-3.0.2/BUILD.bazel": "sha256-QGwfVxAvKdXcpiwDwqQIQPPMD5Q3OuF4zQKxO/2LAgg=",
-        "tools/BUILD.bazel": "sha256-nle5XwhTVKHHcOSL/ZB/5maXf1h6he7Zv86ewEvgD/g=",
+        "tools/BUILD.bazel": "sha256-p62DHhGTKZGijodFYVrvwmFkeXkqgW0HQ4ZV+xlUHFY=",
         "tools/def_filter.c": "sha256-L4JWTIwODpOh/snseMgfSb8g/EUyxeIsXJMNopGEkb8=",
-        "tools/libtorch_codegen_main.py": "sha256-wEM7DV9WrwKRMk0YHFhMoA5xEivXa3s6kycZV200EuY="
+        "tools/libtorch_codegen_main.py": "sha256-wEM7DV9WrwKRMk0YHFhMoA5xEivXa3s6kycZV200EuY=",
+        "tools/libtorch_hipify.py": "sha256-lWS0UgFtqusFJIZUlpGxelktJWfRCtXn4BT9ALM2qW0="
     }
 }

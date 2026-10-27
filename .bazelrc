@@ -76,6 +76,14 @@ common:macos --host_action_env=PATH=/bin:/usr/bin:/usr/local/bin
 # @llvm toolchain (patches/llvm/windows_compiler_param_file.patch).
 build:windows --features=compiler_param_file
 
+# AMD GPUs (ROCm) instead of NVIDIA GPUs (CUDA), e.g. `bazel test
+# --config=rocm //...`. --@libtorch//:rocm_archs selects the GPUs that device
+# code is compiled for.
+common:rocm --@libtorch//:gpu=rocm
+
+# Intel GPUs (XPU) instead of NVIDIA GPUs (CUDA).
+common:xpu --@libtorch//:gpu=xpu
+
 # Build every target of this workspace and of every local registry module
 # (see libtorch.txt), e.g. `bazel build --config=libtorch`.
 build:libtorch --target_pattern_file=libtorch.txt

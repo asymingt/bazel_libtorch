@@ -145,3 +145,6 @@ bazel_dep(name = "rules_license", version = "1.0.0")
 # LibTorch (served from the local registry under modules/, see .bazelrc)
 
 bazel_dep(name = "libtorch", version = "2.14.1")
+bazel_dep(name = "hip-stub", version = "7.14.1")
+bazel_dep(name = "rocm-device-libs", version = "7.14.1")
+bazel_dep(name = "rocm-libraries-stub", version = "7.14.1")

@@ -1,0 +1,23 @@
+matrix:
+  platform:
+    - debian11
+    - ubuntu2404
+  bazel: [8.x, 9.x]
+tasks:
+  verify_targets:
+    name: Verify build targets
+    platform: ${{ platform }}
+    bazel: ${{ bazel }}
+    build_targets:
+      - '@rocm-libraries-stub//:hipblas'
+      - '@rocm-libraries-stub//:hipblaslt'
+      - '@rocm-libraries-stub//:hipcub'
+      - '@rocm-libraries-stub//:hipfft'
+      - '@rocm-libraries-stub//:hiprand_headers'
+      - '@rocm-libraries-stub//:hipsolver'
+      - '@rocm-libraries-stub//:hipsparse'
+      - '@rocm-libraries-stub//:miopen'
+      - '@rocm-libraries-stub//:rocblas'
+      - '@rocm-libraries-stub//:rocprim'
+      - '@rocm-libraries-stub//:rocsolver'
+      - '@rocm-libraries-stub//:rocthrust'

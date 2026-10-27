@@ -46,6 +46,10 @@ concurrency:
 
 permissions:
   contents: read
+  # bazel.yaml deletes superseded disk cache entries after saving; a called
+  # workflow cannot be granted more than its caller. (Fork PRs still get a
+  # read-only token; that step is non-fatal.)
+  actions: write
 
 jobs:
   registry:
@@ -82,6 +86,36 @@ jobs:
       stage: 9x
       host: ${{ matrix.host }}
       target: ${{ matrix.host }}
+      test: true
+
+  # AMD GPUs (ROCm) instead of NVIDIA GPUs (CUDA), on the only platform where
+  # the ROCm and XPU backends are built (see design/PHASE4.md).
+  native-rocm-9x:
+    name: native linux-amd64 ROCm / bazel 9.x
+    needs: [registry]
+    uses: ./.github/workflows/bazel.yaml
+    with:
+      runner: ubuntu-24.04
+      bazel_version: "9.x"
+      stage: 9x-rocm
+      host: linux-amd64
+      target: linux-amd64
+      flags: --config=rocm
+      variant: rocm
+      test: true
+
+  # Intel GPUs (XPU) instead of NVIDIA GPUs (CUDA).
+  native-xpu-9x:
+    name: native linux-amd64 XPU / bazel 9.x
+    needs: [registry]
+    uses: ./.github/workflows/bazel.yaml
+    with:
+      runner: ubuntu-24.04
+      bazel_version: "9.x"
+      stage: 9x-xpu
+      host: linux-amd64
+      target: linux-amd64
+      flags: --config=xpu
       test: true
 
   cross-9x:
@@ -153,9 +187,17 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           mkdir -p out
-          gh api --paginate \
-            "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs?per_page=100" \
-            --jq '.jobs[]' > jobs.jsonl
+          # Keep pages small: each job embeds all of its steps, and with a large
+          # matrix per_page=100 exceeds GitHub's ~10s API timeout (HTTP 502).
+          for attempt in 1 2 3; do
+            if gh api --paginate \
+              "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs?per_page=20" \
+              --jq '.jobs[]' > jobs.jsonl; then
+              break
+            fi
+            [ "$attempt" -eq 3 ] && exit 1
+            sleep $((attempt * 10))
+          done
           python3 .github/scripts/render_build_status.py jobs.jsonl out "$RUN_URL" "${{ github.sha }}" 9.x build_status_9x
           python3 .github/scripts/render_build_status.py jobs.jsonl out "$RUN_URL" "${{ github.sha }}" last_rc build_status_last_rc
 

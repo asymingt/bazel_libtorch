@@ -76,12 +76,13 @@ Our `patches/rules_cuda/multiplatform_redist.patch` fixes all four:
 `@libtorch//BUILD.bazel` defines canonical platform and accelerator `config_setting`s used throughout `@libtorch` and downstream targets:
 
 - **OS/CPU settings:** `:linux_x86_64`, `:linux_arm64`, `:osx_x86_64`, `:osx_arm64`, `:windows_x86_64`, `:windows_arm64`, plus `:unix` (`config_setting_group` matching Linux or macOS).
-- **Accelerator flags (`bool_flag`):**
-  - `:enable_cuda` (default `True`), `:enable_rocm` (default `True`), `:enable_xpu` (default `True`), `:enable_vulkan` (default `True`), `:enable_mps` (default `True`).
+- **Accelerator flags:**
+  - `:gpu` (`string_flag`: `cuda` (default), `rocm`, `xpu` or `none`; NVIDIA, AMD and Intel GPUs are mutually exclusive, see [PHASE4.md](PHASE4.md)) and `:rocm_archs` (`string_list_flag`).
+  - `:enable_vulkan`, `:enable_mps` (`bool_flag`, default `True`).
 - **Resolved accelerator conditions (`selects.config_setting_group`):**
-  - `@libtorch//:cuda_enabled`: True when `:enable_cuda` is `True`, `@rules_cuda//cuda:is_valid_toolchain_found` is `True`, and the target platform is `:linux_x86_64`, `:linux_arm64`, or `:windows_x86_64`.
-  - `@libtorch//:rocm_enabled`: True when `:enable_rocm` is `True` and target is `:linux_x86_64` or `:windows_x86_64`.
-  - `@libtorch//:xpu_enabled`: True when `:enable_xpu` is `True` and target is `:linux_x86_64` or `:windows_x86_64`.
+  - `@libtorch//:cuda_enabled`: True when `:gpu` is `cuda`, `@rules_cuda//cuda:is_valid_toolchain_found` is `True`, and the target platform is `:linux_x86_64` or `:linux_arm64`.
+  - `@libtorch//:rocm_enabled`: True when `:gpu` is `rocm` and target is `:linux_x86_64`.
+  - `@libtorch//:xpu_enabled`: True when `:gpu` is `xpu` and target is `:linux_x86_64`.
   - `@libtorch//:vulkan_enabled`: True when `:enable_vulkan` is `True` and target is Linux or Windows.
   - `@libtorch//:mps_enabled`: True when `:enable_mps` is `True` and target is `:osx_arm64`.
 

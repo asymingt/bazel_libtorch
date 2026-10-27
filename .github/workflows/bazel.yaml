@@ -10,12 +10,21 @@
 #
 # Instead, every job (except `last_rc`, see save_disk_cache) saves under a
 # unique key
-#   bazel-disk-v<cache_version>-<host>-<target>-<sha>-<stage>
+#   bazel-disk-v<cache_version>-[<variant>-]<host>-<target>-<sha>-<stage>-<run_attempt>
 # and restores the most recent entry for the same commit (so `last_rc` picks up
-# what `9.x` just produced), falling back to the most recent entry for the
-# (host, target) pair. Before saving, entries the build did not read or write
+# what `9.x` just produced, and a re-run picks up a partial cache saved on
+# timeout), falling back to the most recent entry for the (host, target) pair.
+# Before saving after a complete build, entries the build did not read or write
 # are pruned (Bazel refreshes mtimes on hits), so each entry holds only the
-# working set of the current commit and does not grow without bound.
+# working set of the current commit and does not grow without bound. If the
+# build hits its time limit before finishing, the unpruned cache (restored
+# entries + everything compiled so far) is still saved so a re-run can resume.
+#
+# After a successful save, every older entry for the same (host, target) pair
+# on the same ref is deleted, so main (and each PR) holds exactly one disk
+# cache per pair. Otherwise every commit adds a full set and GitHub's LRU
+# eviction ends up dropping whichever pair ran earliest, forcing it to rebuild
+# libtorch from scratch.
 name: Bazel job
 
 on:
@@ -46,6 +55,18 @@ on:
         required: false
         type: string
         default: ""
+      flags:
+        description: Extra Bazel flags for every command (e.g. --config=rocm).
+        required: false
+        type: string
+        default: ""
+      variant:
+        description: >-
+          Key-safe name for jobs whose `flags` change the build (e.g. rocm);
+          gives them disk caches separate from the plain (host, target) pair.
+        required: false
+        type: string
+        default: ""
       test:
         description: Run `bazel test //...` after building.
         required: false
@@ -69,6 +90,8 @@ on:
 
 permissions:
   contents: read
+  # Delete superseded disk cache entries (see "Delete superseded disk caches").
+  actions: write
 
 jobs:
   bazel:
@@ -79,8 +102,12 @@ jobs:
 
     env:
       USE_BAZEL_VERSION: ${{ inputs.bazel_version }}
-      PLATFORM_FLAG: ${{ inputs.platform != '' && format('--platforms={0}', inputs.platform) || '' }}
-      DISK_CACHE_PREFIX: bazel-disk-v${{ inputs.cache_version }}-${{ inputs.host }}-${{ inputs.target }}-
+      PLATFORM_FLAG: ${{ inputs.platform != '' && format('--platforms={0}', inputs.platform) || '' }} ${{ inputs.flags }}
+      # The variant goes before <host> so that no prefix matches another
+      # variant's entries (restore-keys and `gh cache list --key` are prefix
+      # matches).
+      DISK_CACHE_PREFIX: bazel-disk-v${{ inputs.cache_version }}-${{ inputs.variant != '' && format('{0}-', inputs.variant) || '' }}${{ inputs.host }}-${{ inputs.target }}-
+      DISK_CACHE_KEY: bazel-disk-v${{ inputs.cache_version }}-${{ inputs.variant != '' && format('{0}-', inputs.variant) || '' }}${{ inputs.host }}-${{ inputs.target }}-${{ github.sha }}-${{ inputs.stage }}-${{ github.run_attempt }}
       # Fixed forward-slash paths: Bazel's rc parser treats `\` as an escape, so
       # runner.temp (D:\a\_temp on Windows) cannot be used in a bazelrc.
       DISK_CACHE_DIR: ${{ startsWith(inputs.host, 'windows') && 'C:/_bzl_disk' || '/tmp/bazel-disk' }}
@@ -139,7 +166,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.DISK_CACHE_DIR }}
-          key: ${{ env.DISK_CACHE_PREFIX }}${{ github.sha }}-${{ inputs.stage }}
+          key: ${{ env.DISK_CACHE_KEY }}
           restore-keys: |
             ${{ env.DISK_CACHE_PREFIX }}${{ github.sha }}-
             ${{ env.DISK_CACHE_PREFIX }}
@@ -161,10 +188,33 @@ jobs:
         shell: bash
         run: bazel build --nobuild --config=libtorch $PLATFORM_FLAG
 
+      # Stop the build after 5 hours to leave ~1 hour before GitHub's 360-minute
+      # job timeout for `bazel shutdown` and uploading the cache. Cold builds on
+      # slower runners can exceed 5h; saving the partial cache on timeout lets
+      # a re-run resume where this attempt left off. Step-level
+      # `timeout-minutes` is portable across Linux, macOS (which does not ship
+      # GNU `timeout` on PATH) and Windows; when it triggers, the step outcome
+      # is `failure` and the next step detects the timeout via elapsed
+      # wall-clock time (`>= 17940s`).
       - name: Build (${{ inputs.host }} -> ${{ inputs.target }})
         id: build
+        timeout-minutes: 300
         shell: bash
-        run: bazel build --config=libtorch $PLATFORM_FLAG
+        run: |
+          date +%s > "${{ runner.temp }}/build_start"
+          bazel build --config=libtorch $PLATFORM_FLAG
+
+      - name: Check if build timed out
+        id: build-timeout
+        if: always() && steps.build.outcome == 'failure'
+        shell: bash
+        run: |
+          start=$(cat "${{ runner.temp }}/build_start" 2>/dev/null || echo 0)
+          elapsed=$(( $(date +%s) - start ))
+          if [ "$start" -gt 0 ] && [ "$elapsed" -ge 17940 ]; then
+            echo "::warning::Build ran for ${elapsed}s and hit the 300m time limit; saving partial disk cache so a re-run can resume."
+            echo "timed_out=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Test (${{ inputs.host }})
         id: test
@@ -177,8 +227,8 @@ jobs:
         shell: bash
         run: bazel shutdown
 
-      # Only prune after a complete build: after a failure, untouched entries
-      # may still be needed by actions that never got to run.
+      # Only prune after a complete build: after a failure or timeout,
+      # untouched entries may still be needed by actions that never got to run.
       - name: Prune unused disk cache entries
         if: inputs.save_disk_cache && steps.build.outcome == 'success'
         shell: bash
@@ -188,16 +238,46 @@ jobs:
           find "$dir" -type f ! -newer "${{ env.DISK_CACHE_MARKER }}" -delete
           echo "Disk cache: $before -> $(du -sh "$dir" | cut -f1)"
 
-      # Only save after a successful build. Restore falls back to the most
-      # recent entry for the (host, target) pair, so a near-empty cache saved by
-      # a run that failed or was cancelled early would shadow the last good one.
-      # `always()` keeps saving when only the tests failed.
+      # Save after a successful build or when the build hit its time limit
+      # (partial progress on top of the restored cache). Never save after a
+      # normal compile failure or early cancellation: a broken commit failing
+      # fast on a cold cache would save a near-empty entry that shadows the
+      # last good one. `always()` keeps saving when the build timed out or when
+      # only the tests failed.
       - name: Save disk cache
-        if: always() && inputs.save_disk_cache && steps.build.outcome == 'success' && steps.restore-disk-cache.outputs.cache-hit != 'true'
+        id: save-disk-cache
+        if: always() && inputs.save_disk_cache && (steps.build.outcome == 'success' || steps.build-timeout.outputs.timed_out == 'true') && steps.restore-disk-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.DISK_CACHE_DIR }}
-          key: ${{ env.DISK_CACHE_PREFIX }}${{ github.sha }}-${{ inputs.stage }}
+          key: ${{ env.DISK_CACHE_KEY }}
+
+      # Keep exactly one disk cache per (host, target) pair per ref: once the
+      # new entry is saved, older ones for the same pair are never restored
+      # first again and only push the repo towards its cache quota. Scoped to
+      # this run's ref, so a PR never touches main's caches. Only runs after a
+      # successful save, so a failed build never removes the last good entry.
+      # Non-fatal: fork PRs get a read-only token, and a leftover entry is
+      # cleaned up by the next successful run (or cache_cleanup.yaml).
+      - name: Delete superseded disk caches
+        if: always() && steps.save-disk-cache.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          KEEP_KEY: ${{ env.DISK_CACHE_KEY }}
+        run: |
+          # --key is a prefix match; DISK_CACHE_PREFIX ends in '-', so it only
+          # matches this exact (variant, host, target) combination.
+          ids=$(gh cache list --ref "$GITHUB_REF" --key "$DISK_CACHE_PREFIX" --limit 100 \
+            --json id,key --jq '.[] | select(.key != $ENV.KEEP_KEY) | .id')
+          count=0
+          for id in $ids; do
+            gh cache delete "$id"
+            count=$((count + 1))
+          done
+          echo "Kept $KEEP_KEY; deleted $count superseded entries on $GITHUB_REF"
 
       - name: Upload test logs on failure
         if: failure() && steps.test.outcome == 'failure'

@@ -1,0 +1,59 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+# Clang's HIP compilation, with device code for CDNA2 (MI200), CDNA3 (MI300)
+# and RDNA3 (RX 7000) GPUs.
+HIP_COPTS = [
+    "-std=gnu++20",
+    "-x",
+    "hip",
+    "--offload-arch=gfx90a",
+    "--offload-arch=gfx942",
+    "--offload-arch=gfx1100",
+    "-fno-gpu-rdc",
+    "--rocm-path=$(execpath @hip-stub//:hip_sdk)",
+    "-B$(execpath @hip-stub//:hip_sdk)/bin",
+]
+
+cc_test(
+    name = "hip_smoke_test",
+    srcs = ["hip_smoke_test.cc"],
+    additional_compiler_inputs = ["@hip-stub//:hip_sdk"],
+    copts = HIP_COPTS,
+    # Runs on this machine's GPU (if any), never on a remote executor.
+    tags = ["no-remote-exec"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    deps = [
+        "//tests/common:check",
+        "@hip-stub//:amdhip64",
+    ],
+)
+
+cc_test(
+    name = "rocm_libraries_test",
+    srcs = ["rocm_libraries_test.cc"],
+    additional_compiler_inputs = ["@hip-stub//:hip_sdk"],
+    copts = HIP_COPTS,
+    # Runs on this machine's GPU (if any), never on a remote executor.
+    tags = ["no-remote-exec"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    deps = [
+        "//tests/common:check",
+        "@hip-stub//:amdhip64",
+        "@rocm-libraries-stub//:hipblas",
+        "@rocm-libraries-stub//:hipblaslt",
+        "@rocm-libraries-stub//:hipcub",
+        "@rocm-libraries-stub//:hipfft",
+        "@rocm-libraries-stub//:hiprand_headers",
+        "@rocm-libraries-stub//:hipsolver",
+        "@rocm-libraries-stub//:hipsparse",
+        "@rocm-libraries-stub//:rocblas",
+        "@rocm-libraries-stub//:rocsolver",
+        "@rocm-libraries-stub//:rocthrust",
+    ],
+)

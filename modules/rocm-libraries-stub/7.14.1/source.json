@@ -1,0 +1,14 @@
+{
+    "integrity": "sha256-JOhrOh0hHk8+sMMYVbetV5L4/1Jlw5VVagOdfIdMGyQ=",
+    "strip_prefix": "rocm-libraries-therock-7.14.1/projects",
+    "url": "https://github.com/ROCm/rocm-libraries/archive/refs/tags/therock-7.14.1.tar.gz",
+    "overlay": {
+        "BUILD.bazel": "sha256-OqS4JSa4boxMN/lsU/qMZy/Meh/ku1hX/68oG6ouR6k=",
+        "MODULE.bazel": "sha256-1pX05gsXKFbZJrIyaJH3Y7Igyv9K5NNhJSmqrzAL9ik=",
+        "rocm_libraries.bzl": "sha256-lgEW2THlI3qZjpMKKwmorOsSaSwQUiPguUb1aQP4ukw="
+    },
+    "patch_strip": 1,
+    "patches": {
+        "rocthrust_libcxx_wrap_iter.patch": "sha256-UYX8OR6x0ytDb+8KvrWbbm+H+E8eN3ZWWRJDmZs+qxk="
+    }
+}

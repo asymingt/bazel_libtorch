@@ -4,8 +4,12 @@ load("@rules_python//python:py_library.bzl", "py_library")
 
 package(default_applicable_licenses = ["//:license"])
 
-# Upstream's Vulkan shader generator (see //:libtorch_codegen.bzl).
-exports_files(["gen_vulkan_spv.py"])
+# Upstream's Vulkan shader generator and the ROCm hipify driver (see
+# //:libtorch_codegen.bzl).
+exports_files([
+    "gen_vulkan_spv.py",
+    "libtorch_hipify.py",
+])
 
 # Used by windows_def_file() in //:libtorch_config.bzl.
 cc_binary(
