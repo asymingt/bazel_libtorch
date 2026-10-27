@@ -25,5 +25,9 @@
         "tools/def_filter.c": "sha256-L4JWTIwODpOh/snseMgfSb8g/EUyxeIsXJMNopGEkb8=",
         "tools/libtorch_codegen_main.py": "sha256-wEM7DV9WrwKRMk0YHFhMoA5xEivXa3s6kycZV200EuY=",
         "tools/libtorch_hipify.py": "sha256-lWS0UgFtqusFJIZUlpGxelktJWfRCtXn4BT9ALM2qW0="
+    },
+    "patch_strip": 1,
+    "patches": {
+        "remove_placeholder_macros_h.patch": "sha256-jeZetZY9L/OaTy4tsd+caXyB3NFOxm6Uhk9lp7uUi98="
     }
 }
