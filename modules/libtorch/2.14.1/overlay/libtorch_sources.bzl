@@ -9,6 +9,8 @@ load(
     "//:build_variables.bzl",
     "jit_core_sources",
     "libtorch_cuda_core_sources",
+    "libtorch_distributed_base_sources",
+    "libtorch_distributed_extra_sources",
     "lazy_tensor_ts_sources",
     "libtorch_cmake_sources",
     "torch_cpp_srcs",
@@ -197,3 +199,11 @@ ATEN_CUDA_GLOBS = [
 
 # caffe2/CMakeLists.txt: Caffe2_GPU_SRCS that are not in ATen.
 TORCH_CUDA_SOURCES = libtorch_cuda_core_sources
+
+# caffe2/CMakeLists.txt: with USE_DISTRIBUTED, c10d (the process groups, the
+# stores and the control plane), and (as upstream except on Windows) the
+# "extra" sources: c10d's HashStore, distributed autograd and RPC (whose
+# TensorPipe agent is not built, as without USE_TENSORPIPE).
+TORCH_DISTRIBUTED_SOURCES = libtorch_distributed_base_sources
+
+TORCH_DISTRIBUTED_EXTRA_SOURCES = libtorch_distributed_extra_sources

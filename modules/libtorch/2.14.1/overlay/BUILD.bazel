@@ -10,7 +10,7 @@ load("@rules_python//python:py_library.bzl", "py_library")
 load(":libtorch_codegen.bzl", "ATEN_GENERATED_CUDA_KERNEL_SOURCES", "libtorch_aten_codegen", "libtorch_autograd_codegen", "libtorch_hipify", "libtorch_metallib_headers", "libtorch_vulkan_spv")
 load(":libtorch_hip.bzl", "HIP_SOURCE_DIRS", "hip_include_copts", "rocm_offload_archs")
 load(":libtorch_config.bzl", "LIBTORCH_COPTS", "libtorch_cpu_config_headers", "libtorch_cuda_config_headers", "libtorch_generated_headers", "windows_def_file")
-load(":libtorch_sources.bzl", "ATEN_CPU_EXCLUDES", "ATEN_CPU_GLOBS", "ATEN_CPU_KERNEL_GLOBS", "ATEN_CUDA_GLOBS", "ATEN_CUDA_KERNEL_GLOBS", "C10_CUDA_SOURCES", "TORCH_CPU_ITT_SOURCES", "TORCH_CPU_SOURCES", "TORCH_CUDA_SOURCES", "TORCH_HEADER_GLOBS")
+load(":libtorch_sources.bzl", "ATEN_CPU_EXCLUDES", "ATEN_CPU_GLOBS", "ATEN_CPU_KERNEL_GLOBS", "ATEN_CUDA_GLOBS", "ATEN_CUDA_KERNEL_GLOBS", "C10_CUDA_SOURCES", "TORCH_CPU_ITT_SOURCES", "TORCH_CPU_SOURCES", "TORCH_CUDA_SOURCES", "TORCH_DISTRIBUTED_EXTRA_SOURCES", "TORCH_DISTRIBUTED_SOURCES", "TORCH_HEADER_GLOBS")
 
 package(
     default_applicable_licenses = [":license"],
@@ -205,6 +205,16 @@ selects.config_setting_group(
         ":_enable_mps_set",
         ":osx_arm64",
     ],
+    visibility = ["//visibility:public"],
+)
+
+# c10d (USE_DISTRIBUTED), with Gloo, on Linux. Upstream's CMake also builds
+# it on Windows, but only with MSVC: Gloo's Windows support (and the BCR's
+# libuv, for its transport) assume MSVC, not MinGW. It does not build it on
+# macOS by default.
+alias(
+    name = "distributed_enabled",
+    actual = "@platforms//os:linux",
     visibility = ["//visibility:public"],
 )
 
@@ -453,6 +463,14 @@ cc_library(
             "USE_VULKAN_API",
         ],
         "//conditions:default": [],
+    }) + select({
+        # Public on torch_cpu (caffe2/CMakeLists.txt): c10d's headers depend on
+        # them.
+        ":distributed_enabled": [
+            "USE_C10D_GLOO",
+            "USE_DISTRIBUTED",
+        ],
+        "//conditions:default": [],
     }),
     includes = [
         ".",
@@ -467,7 +485,28 @@ cc_library(
         "@nlohmann_json//:json",
         # <sleef.h>, from ATen's vectorized (ATen/cpu/vec) headers.
         "@sleef",
-    ],
+    ] + select({
+        # <fbgemm/Fbgemm.h> (ATen/native/quantized/cpu/fbgemm_utils.h).
+        "@platforms//cpu:aarch64": ["@fbgemm//:fbgemm_headers"],
+        "@platforms//cpu:x86_64": ["@fbgemm//:fbgemm_headers"],
+        "//conditions:default": [],
+    }) + select({
+        # c10d's public headers include Gloo's (ProcessGroupGloo.hpp) and
+        # cpp-httplib's (control_plane/WorkerServer.hpp).
+        ":distributed_enabled": [
+            "@cpp-httplib//:httplib",
+            "@gloo",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+# torch_cpu's private include directory (caffe2/CMakeLists.txt's
+# ${TORCH_SRC_DIR}/csrc), for includes relative to it (e.g. c10d's
+# "distributed/c10d/ProcessGroup.hpp"); its headers are torch_cpu_headers'.
+cc_library(
+    name = "torch_csrc_include_dir",
+    includes = ["torch/csrc"],
 )
 
 # On Windows, libtorch_mingw_compat.h is force-included (see there).
@@ -494,7 +533,18 @@ TORCH_CPU_LOCAL_DEFINES = [
     "CAFFE2_BUILD_MAIN_LIB",
     "MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS",
     "USE_EXTERNAL_MZCRC",
+    # The Kineto profiler (cmake/Dependencies.cmake). The profiler's headers
+    # depend on it (and on HAS_CUPTI), so every @libtorch library agrees.
+    "USE_KINETO",
 ] + select({
+    ":cuda_enabled": ["HAS_CUPTI"],
+    "//conditions:default": [],
+}) + select({
+    # FBGEMM's quantized (INT8/FP16) operators, on the CPUs it supports.
+    "@platforms//cpu:aarch64": ["USE_FBGEMM"],
+    "@platforms//cpu:x86_64": ["USE_FBGEMM"],
+    "//conditions:default": [],
+}) + select({
     "@platforms//os:linux": [
         "HAVE_MALLOC_USABLE_SIZE=1",
         "HAVE_MMAP=1",
@@ -615,15 +665,31 @@ cc_library(
     ] + select({
         "@platforms//cpu:x86_64": TORCH_CPU_ITT_SOURCES,
         "//conditions:default": [],
+    }) + select({
+        ":distributed_enabled": TORCH_DISTRIBUTED_SOURCES,
+        "//conditions:default": [],
+    }) + select({
+        ":distributed_enabled": TORCH_DISTRIBUTED_EXTRA_SOURCES,
+        "//conditions:default": [],
     }),
     copts = LIBTORCH_COPTS + _MINGW_COMPAT_COPTS,
     implementation_deps = [
         ":pocketfft",
+        ":torch_csrc_include_dir",
         "//third_party/miniz-3.0.2:miniz",
         "@cpuinfo",
         "@flatbuffers//:runtime_cc",
     ] + select({
         "@platforms//cpu:x86_64": ["@ittapi//:ittnotify"],
+        "//conditions:default": [],
+    }) + select({
+        # Kineto with CUDA's CUPTI (KINETO_BACKEND=cuda), or CPU-only (for
+        # ROCm and XPU too: no rocprofiler-sdk or PTI).
+        ":cuda_enabled": ["@kineto//:kineto_cupti"],
+        "//conditions:default": ["@kineto//:kineto"],
+    }) + select({
+        "@platforms//cpu:aarch64": ["@fbgemm"],
+        "@platforms//cpu:x86_64": ["@fbgemm"],
         "//conditions:default": [],
     }) + _MINGW_COMPAT_DEPS,
     local_defines = TORCH_CPU_LOCAL_DEFINES + select({

@@ -1,0 +1,13 @@
+{
+    "integrity": "sha256-6WJDQ6cyLIg/WR8h9FS4Omb27Z7x/rRbpM2gCtm/ijc=",
+    "strip_prefix": "FBGEMM-bf6dce360a4fe133bc779e2fd036277678509f95",
+    "url": "https://github.com/pytorch/fbgemm/archive/bf6dce360a4fe133bc779e2fd036277678509f95.tar.gz",
+    "overlay": {
+        "BUILD.bazel": "sha256-8SCuhFfWnznj6SPaNommAaVUPiqNrRcHD++Csu+i6j8=",
+        "MODULE.bazel": "sha256-my71amSgClG22MU8VRD2BWSLr9HG5HkMSznW0rkhZJM="
+    },
+    "patch_strip": 1,
+    "patches": {
+        "mingw_aligned_alloc.patch": "sha256-OZewUk0zZ6iMwR9hhV3PoCuy/XPLCFbqdCGicaIAIFc="
+    }
+}

@@ -11,4 +11,5 @@ tasks:
     platform: ${{ platform }}
     bazel: ${{ bazel }}
     build_targets:
+      - '@kineto//:kineto'
       - '@kineto//:kineto_headers'

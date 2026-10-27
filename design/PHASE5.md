@@ -1,6 +1,24 @@
 # PHASE 5: Performance, Quantization, Profiling & Distributed Ecosystem (`@xnnpack`, `@fbgemm`, `@kineto`, `@gloo`)
 
-> **Status:** Planned (follows [PHASE4.md](PHASE4.md)). Completes the `@libtorch` 2.14.1 feature set to match a full upstream production CMake build by packaging `@xnnpack`, `@fbgemm` (with `@asmjit`), `@kineto`, and `@gloo` as local BCR modules under `./modules/`, enabling INT8/FP16 quantized operators, Kineto CPU/GPU profiling, and `c10d` collective communications, and hardening the $6 \times 6$ CI matrix and sanitizers for upstreaming to the Bazel Central Registry.
+> **Status:** In progress (follows [PHASE4.md](PHASE4.md)). Completes the `@libtorch` 2.14.1 feature set to match a full upstream production CMake build by packaging `@xnnpack`, `@fbgemm` (with `@asmjit`), `@kineto`, and `@gloo` as local BCR modules under `./modules/`, enabling INT8/FP16 quantized operators, Kineto CPU/GPU profiling, and `c10d` collective communications, and hardening the $6 \times 6$ CI matrix and sanitizers for upstreaming to the Bazel Central Registry.
+
+## 0. Progress and Decisions (2026-10-26)
+
+Every dependency is pinned to the commit that PyTorch 2.14.1's `third_party/` submodules pin (not to the releases of section 1):
+
+| Module | Version | Notes |
+| :--- | :--- | :--- |
+| `kineto` | `0.0.0-20260805-15f4784` | `:kineto` (CPU) and `:kineto_cupti` (CUPTI, on `:cuda_enabled`), from `libkineto/libkineto_defs.bzl`; dynolog's IPC fabric on Linux. ROCm and XPU builds use `:kineto` (no rocprofiler-sdk or PTI). Patch: `<cstdlib>` for libc++. |
+| `asmjit` | `0.0.0-20250628-a3199e8` | FBGEMM's submodule. Static (`ASMJIT_STATIC`). |
+| `fbgemm` | `0.0.0-20260514-bf6dce3` | From `defs.bzl` (the repository's own `BUILD.bazel` only builds on linux-x86_64): AVX2/AVX-512 on x86_64, NEON on AArch64, and SVE2 and KleidiAI except on macOS. Patch: MinGW's `_aligned_malloc`. |
+| `gloo` | `0.0.0-20260610-74cc005` | CPU only (Gloo's CUDA collectives are not built; `GLOO_USE_TORCH_DTYPES` only affects them): TCP transport on Linux, libuv elsewhere. Patch: `<exception>`, `<iterator>` for libc++. |
+| `cpp-httplib` | `0.50.1` | Header-only, without TLS and zlib (the BCR's 0.46.0 depends on BoringSSL and zlib). |
+
+`@libtorch` changes:
+
+- `USE_KINETO` (and `HAS_CUPTI` with CUDA) and `USE_FBGEMM` (x86_64 and AArch64) are in `TORCH_CPU_LOCAL_DEFINES`: the profiler's and quantization's headers depend on them, so every `@libtorch` library agrees.
+- `:distributed_enabled` (Linux only: upstream also builds it on Windows, but only with MSVC, as Gloo's Windows code and the BCR's libuv assume MSVC, not MinGW; and not on macOS by default): `torch_cpu` compiles `libtorch_distributed_base_sources` and `libtorch_distributed_extra_sources` (c10d's HashStore, distributed autograd, and RPC without the TensorPipe agent, as without `USE_TENSORPIPE`), with the public `USE_DISTRIBUTED` and `USE_C10D_GLOO`. TCPStore uses its own backend (upstream only enables `TORCH_USE_LIBUV` with TensorPipe).
+- **XNNPACK is not built:** upstream 2.14.1 defaults `USE_XNNPACK` to `OFF` (`CMakeLists.txt`), so section 2.1 no longer matches upstream. `USE_PYTORCH_QNNPACK` and `USE_NNPACK` default to `ON` upstream but are not built yet (FBGEMM provides the quantized engine on both x86_64 and AArch64).
 
 ---
 
