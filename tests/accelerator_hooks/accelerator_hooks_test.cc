@@ -30,7 +30,11 @@ int main() {
   // which reports the backend as unavailable instead of failing.
   EXPECT(!at::detail::getCUDAHooks().hasCUDA());
   EXPECT(!at::detail::getHIPHooks().hasHIP());
+#ifdef TEST_XPU_ENABLED
+  EXPECT(at::detail::getXPUHooks().hasXPU());
+#else
   EXPECT(!at::detail::getXPUHooks().hasXPU());
+#endif
 #ifndef TEST_MPS_ENABLED
   EXPECT(!at::detail::getMPSHooks().hasMPS());
 #endif

@@ -4,10 +4,15 @@ cc_test(
     name = "accelerator_hooks_test",
     srcs = ["accelerator_hooks_test.cc"],
     copts = ["-std=gnu++20"],
-    # With MPS built in, its hooks are registered (and report a device on
-    # Apple silicon), so the test only expects the default stub without it.
+    # With MPS or XPU built in, their hooks are registered (MPS reports a
+    # device on Apple silicon; XPUHooks::hasXPU() is unconditionally true when
+    # torch_xpu is linked), so the test only expects the default stub without
+    # them.
     local_defines = select({
         "@libtorch//:mps_enabled": ["TEST_MPS_ENABLED"],
+        "//conditions:default": [],
+    }) + select({
+        "@libtorch//:xpu_enabled": ["TEST_XPU_ENABLED"],
         "//conditions:default": [],
     }),
     deps = [
