@@ -9,7 +9,7 @@ load("@rules_license//rules:license.bzl", "license")
 load("@rules_python//python:py_library.bzl", "py_library")
 load(":libtorch_codegen.bzl", "ATEN_GENERATED_CUDA_KERNEL_SOURCES", "libtorch_aten_codegen", "libtorch_autograd_codegen", "libtorch_hipify", "libtorch_metallib_headers", "libtorch_vulkan_spv")
 load(":libtorch_hip.bzl", "HIP_SOURCE_DIRS", "hip_include_copts", "rocm_offload_archs")
-load(":libtorch_config.bzl", "LIBTORCH_COPTS", "libtorch_cpu_config_headers", "libtorch_cuda_config_headers", "libtorch_generated_headers", "windows_def_file")
+load(":libtorch_config.bzl", "LIBTORCH_COPTS", "cc_header_copy", "libtorch_cpu_config_headers", "libtorch_cuda_config_headers", "libtorch_generated_headers", "windows_def_file")
 load(":libtorch_sources.bzl", "ATEN_CPU_EXCLUDES", "ATEN_CPU_GLOBS", "ATEN_CPU_KERNEL_GLOBS", "ATEN_CUDA_GLOBS", "ATEN_CUDA_KERNEL_GLOBS", "C10_CUDA_SOURCES", "TORCH_CPU_ITT_SOURCES", "TORCH_CPU_SOURCES", "TORCH_CUDA_SOURCES", "TORCH_DISTRIBUTED_EXTRA_SOURCES", "TORCH_DISTRIBUTED_SOURCES", "TORCH_HEADER_GLOBS")
 
 package(
@@ -416,10 +416,12 @@ libtorch_cpu_config_headers(name = "torch_cpu_config_headers")
 ]
 
 # <pocketfft_hdronly.h>, which the BCR module only provides relative to its
-# repository root (without an include path).
-copy_file(
+# repository root (without an include path). Taken from the public
+# cc_library: the BCR module does not export the header file itself.
+cc_header_copy(
     name = "pocketfft_hdronly_h",
-    src = "@pocketfft//:pocketfft_hdronly.h",
+    dep = "@pocketfft",
+    header = "pocketfft_hdronly.h",
     out = "third_party/pocketfft/pocketfft_hdronly.h",
 )
 

@@ -151,6 +151,37 @@ windows_def_file = rule(
     },
 )
 
+def _cc_header_copy_impl(ctx):
+    matches = [
+        hdr
+        for hdr in ctx.attr.dep[CcInfo].compilation_context.headers.to_list()
+        if hdr.basename == ctx.attr.header
+    ]
+    if len(matches) != 1:
+        fail("expected exactly one header named {} in {}, found {}".format(
+            ctx.attr.header,
+            ctx.attr.dep.label,
+            [hdr.path for hdr in matches],
+        ))
+    ctx.actions.symlink(output = ctx.outputs.out, target_file = matches[0])
+    return [DefaultInfo(files = depset([ctx.outputs.out]))]
+
+cc_header_copy = rule(
+    doc = """Copies a header out of a cc_library's public headers.
+
+    Unlike copy_file on the header's source file target, this only relies on
+    the cc_library's visibility: source files of another repository are
+    private unless it exports them (exports_files), which Bazel 10 enforces
+    by default (--incompatible_no_implicit_file_export).
+    """,
+    implementation = _cc_header_copy_impl,
+    attrs = {
+        "dep": attr.label(mandatory = True, providers = [CcInfo], doc = "The cc_library."),
+        "header": attr.string(mandatory = True, doc = "Basename of the header to copy."),
+        "out": attr.output(mandatory = True, doc = "The copy."),
+    },
+)
+
 # aten/src/ATen/Config.h.in. Every backend library that is not built yet is
 # off: no BLAS/LAPACK (ATen's own GEMM fallback, and linear algebra ops raise
 # at runtime), no MKL/oneDNN/NNPACK/KleidiAI, and ATen's native thread pool
