@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="410" height="358" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="12">
+<rect width="410" height="358" fill="#ffffff"/>
+<text x="8" y="16" font-weight="600">host ↓ / target →</text>
+<text transform="translate(139.0,86) rotate(-60)" fill="#24292f">linux-amd64</text>
+<text transform="translate(173.0,86) rotate(-60)" fill="#24292f">linux-arm64</text>
+<text transform="translate(207.0,86) rotate(-60)" fill="#24292f">darwin-amd64</text>
+<text transform="translate(241.0,86) rotate(-60)" fill="#24292f">darwin-arm64</text>
+<text transform="translate(275.0,86) rotate(-60)" fill="#24292f">windows-amd64</text>
+<text transform="translate(309.0,86) rotate(-60)" fill="#24292f">windows-arm64</text>
+<text x="110" y="113.0" text-anchor="end" fill="#24292f">linux-amd64</text>
+<g><title>linux-amd64 → linux-amd64: native build + test, success</title><rect x="120" y="94" width="30" height="30" rx="4" fill="#2da44e" stroke="#24292f" stroke-width="2"/><text x="135.0" y="115.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>linux-amd64 → linux-arm64: cross build, success</title><rect x="154" y="94" width="30" height="30" rx="4" fill="#2da44e"/><text x="169.0" y="115.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>linux-amd64 → darwin-amd64: cross build, success</title><rect x="188" y="94" width="30" height="30" rx="4" fill="#2da44e"/><text x="203.0" y="115.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>linux-amd64 → darwin-arm64: cross build, success</title><rect x="222" y="94" width="30" height="30" rx="4" fill="#2da44e"/><text x="237.0" y="115.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>linux-amd64 → windows-amd64: cross build, success</title><rect x="256" y="94" width="30" height="30" rx="4" fill="#2da44e"/><text x="271.0" y="115.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>linux-amd64 → windows-arm64: cross build, success</title><rect x="290" y="94" width="30" height="30" rx="4" fill="#2da44e"/><text x="305.0" y="115.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<text x="110" y="147.0" text-anchor="end" fill="#24292f">linux-arm64</text>
+<g><title>linux-arm64 → linux-amd64: cross build, success</title><rect x="120" y="128" width="30" height="30" rx="4" fill="#2da44e"/><text x="135.0" y="149.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>linux-arm64 → linux-arm64: native build + test, success</title><rect x="154" y="128" width="30" height="30" rx="4" fill="#2da44e" stroke="#24292f" stroke-width="2"/><text x="169.0" y="149.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>linux-arm64 → darwin-amd64: cross build, success</title><rect x="188" y="128" width="30" height="30" rx="4" fill="#2da44e"/><text x="203.0" y="149.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>linux-arm64 → darwin-arm64: cross build, success</title><rect x="222" y="128" width="30" height="30" rx="4" fill="#2da44e"/><text x="237.0" y="149.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>linux-arm64 → windows-amd64: cross build, success</title><rect x="256" y="128" width="30" height="30" rx="4" fill="#2da44e"/><text x="271.0" y="149.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>linux-arm64 → windows-arm64: cross build, success</title><rect x="290" y="128" width="30" height="30" rx="4" fill="#2da44e"/><text x="305.0" y="149.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<text x="110" y="181.0" text-anchor="end" fill="#24292f">darwin-amd64</text>
+<g><title>darwin-amd64 → linux-amd64: cross build, success</title><rect x="120" y="162" width="30" height="30" rx="4" fill="#2da44e"/><text x="135.0" y="183.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>darwin-amd64 → linux-arm64: cross build, success</title><rect x="154" y="162" width="30" height="30" rx="4" fill="#2da44e"/><text x="169.0" y="183.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>darwin-amd64 → darwin-amd64: native build + test, success</title><rect x="188" y="162" width="30" height="30" rx="4" fill="#2da44e" stroke="#24292f" stroke-width="2"/><text x="203.0" y="183.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>darwin-amd64 → darwin-arm64: cross build, success</title><rect x="222" y="162" width="30" height="30" rx="4" fill="#2da44e"/><text x="237.0" y="183.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>darwin-amd64 → windows-amd64: cross build, success</title><rect x="256" y="162" width="30" height="30" rx="4" fill="#2da44e"/><text x="271.0" y="183.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>darwin-amd64 → windows-arm64: cross build, success</title><rect x="290" y="162" width="30" height="30" rx="4" fill="#2da44e"/><text x="305.0" y="183.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<text x="110" y="215.0" text-anchor="end" fill="#24292f">darwin-arm64</text>
+<g><title>darwin-arm64 → linux-amd64: cross build, success</title><rect x="120" y="196" width="30" height="30" rx="4" fill="#2da44e"/><text x="135.0" y="217.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>darwin-arm64 → linux-arm64: cross build, success</title><rect x="154" y="196" width="30" height="30" rx="4" fill="#2da44e"/><text x="169.0" y="217.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>darwin-arm64 → darwin-amd64: cross build, success</title><rect x="188" y="196" width="30" height="30" rx="4" fill="#2da44e"/><text x="203.0" y="217.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>darwin-arm64 → darwin-arm64: native build + test, success</title><rect x="222" y="196" width="30" height="30" rx="4" fill="#2da44e" stroke="#24292f" stroke-width="2"/><text x="237.0" y="217.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>darwin-arm64 → windows-amd64: cross build, success</title><rect x="256" y="196" width="30" height="30" rx="4" fill="#2da44e"/><text x="271.0" y="217.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>darwin-arm64 → windows-arm64: cross build, success</title><rect x="290" y="196" width="30" height="30" rx="4" fill="#2da44e"/><text x="305.0" y="217.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<text x="110" y="249.0" text-anchor="end" fill="#24292f">windows-amd64</text>
+<g><title>windows-amd64 → linux-amd64: cross build, failure</title><rect x="120" y="230" width="30" height="30" rx="4" fill="#cf222e"/><text x="135.0" y="251.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✗</text></g>
+<g><title>windows-amd64 → linux-arm64: cross build, success</title><rect x="154" y="230" width="30" height="30" rx="4" fill="#2da44e"/><text x="169.0" y="251.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>windows-amd64 → darwin-amd64: cross build, success</title><rect x="188" y="230" width="30" height="30" rx="4" fill="#2da44e"/><text x="203.0" y="251.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>windows-amd64 → darwin-arm64: cross build, success</title><rect x="222" y="230" width="30" height="30" rx="4" fill="#2da44e"/><text x="237.0" y="251.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>windows-amd64 → windows-amd64: native build + test, success</title><rect x="256" y="230" width="30" height="30" rx="4" fill="#2da44e" stroke="#24292f" stroke-width="2"/><text x="271.0" y="251.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>windows-amd64 → windows-arm64: cross build, success</title><rect x="290" y="230" width="30" height="30" rx="4" fill="#2da44e"/><text x="305.0" y="251.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<text x="110" y="283.0" text-anchor="end" fill="#24292f">windows-arm64</text>
+<g><title>windows-arm64 → linux-amd64: cross build, success</title><rect x="120" y="264" width="30" height="30" rx="4" fill="#2da44e"/><text x="135.0" y="285.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>windows-arm64 → linux-arm64: cross build, success</title><rect x="154" y="264" width="30" height="30" rx="4" fill="#2da44e"/><text x="169.0" y="285.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>windows-arm64 → darwin-amd64: cross build, success</title><rect x="188" y="264" width="30" height="30" rx="4" fill="#2da44e"/><text x="203.0" y="285.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>windows-arm64 → darwin-arm64: cross build, success</title><rect x="222" y="264" width="30" height="30" rx="4" fill="#2da44e"/><text x="237.0" y="285.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>windows-arm64 → windows-amd64: cross build, success</title><rect x="256" y="264" width="30" height="30" rx="4" fill="#2da44e"/><text x="271.0" y="285.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<g><title>windows-arm64 → windows-arm64: native build + test, success</title><rect x="290" y="264" width="30" height="30" rx="4" fill="#2da44e" stroke="#24292f" stroke-width="2"/><text x="305.0" y="285.0" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">✓</text></g>
+<rect x="8" y="307" width="14" height="14" rx="3" fill="#2da44e"/>
+<text x="27" y="318" fill="#24292f">pass</text>
+<rect x="61" y="307" width="14" height="14" rx="3" fill="#cf222e"/>
+<text x="80" y="318" fill="#24292f">fail</text>
+<rect x="114" y="307" width="14" height="14" rx="3" fill="#8c959f"/>
+<text x="133" y="318" fill="#24292f">skipped (dependency failed)</text>
+<rect x="328" y="307" width="14" height="14" rx="3" fill="#bf8700"/>
+<text x="347" y="318" fill="#24292f">running</text>
+<text x="8" y="340" fill="#57606a">bazel 9.x · outlined: native (build + test) · main @ 01b2ecd</text>
+</svg>
