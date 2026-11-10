@@ -1,0 +1,1 @@
+# Nothing here: the targets under test are @libtorch//... (see MODULE.bazel).

@@ -142,9 +142,19 @@ bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_cc", version = "0.2.26")
 bazel_dep(name = "rules_license", version = "1.0.0")
 
-# LibTorch (served from the local registry under modules/, see .bazelrc)
+# LibTorch: rules_torch (https://github.com/asymingt/rules_torch, served from
+# the local registry under modules/, see .bazelrc) and its `libtorch`
+# extension, which fetches the PyTorch sources and creates @libtorch. To work
+# on a checkout of rules_torch, put
+#   common --override_module=rules_torch=../rules_torch
+# in user.bazelrc.
 
-bazel_dep(name = "libtorch", version = "2.14.1")
+bazel_dep(name = "rules_torch", version = "0.0.2")
+
+libtorch = use_extension("@rules_torch//libtorch:extensions.bzl", "libtorch")
+libtorch.version(version = "2.14.1")
+use_repo(libtorch, "libtorch")
+
 bazel_dep(name = "hip-stub", version = "7.14.1")
 bazel_dep(name = "rocm-device-libs", version = "7.14.1")
 bazel_dep(name = "rocm-libraries-stub", version = "7.14.1")

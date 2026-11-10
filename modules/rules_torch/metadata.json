@@ -1,0 +1,19 @@
+{
+    "homepage": "https://github.com/asymingt/bazel_libtorch",
+    "maintainers": [
+        {
+            "email": "andrew.c.symington@gmail.com",
+            "github": "asymingt",
+            "github_user_id": 37671,
+            "name": "Andrew Symington"
+        }
+    ],
+    "repository": [
+        "github:asymingt/bazel_libtorch"
+    ],
+    "versions": [
+        "0.0.1",
+        "0.0.2"
+    ],
+    "yanked_versions": {}
+}

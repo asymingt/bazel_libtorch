@@ -1,12 +1,15 @@
 # LibTorch 2.14 for Bazel — from source, hermetic, cross-compiled
 
 This repository is a **staging area for a set of Bazel modules that build
-LibTorch 2.14.1 (`pytorch/pytorch@v2.14.1`) from source** with a hermetic LLVM
+LibTorch (`pytorch/pytorch`, currently 2.14.1) from source** with a hermetic LLVM
 toolchain and multi-vendor GPU support (`CUDA`, `ROCm/HIP`, `Intel XPU`,
 `Vulkan`, and `Apple MPS`). It holds a local Bazel registry
-(`bazel_registry.json` + `modules/`) with `@libtorch` and its companion modules,
-the smoke and runtime tests that exercise them, and the CI that proves they
-build and cross-compile everywhere. The goal is to upstream these modules to the
+(`bazel_registry.json` + `modules/`) with
+[`rules_torch`](https://github.com/asymingt/rules_torch) — whose module
+extension fetches the PyTorch sources and lays the Bazel build over them as
+`@libtorch` — and the companion modules it depends on, the smoke and runtime tests that
+exercise them, and the CI that proves they build and cross-compile everywhere.
+The goal is to upstream these modules to the
 [Bazel Central Registry](https://registry.bazel.build); until then you can use
 them directly from here.
 
@@ -74,14 +77,19 @@ common --registry=https://asymingt.github.io/bazel_libtorch/
 common --registry=https://bcr.bazel.build
 ```
 
-Then depend on `@libtorch` like any other module:
+Then depend on `rules_torch` and let its `libtorch` extension create
+`@libtorch` from the PyTorch version you want:
 
 ```starlark
 # MODULE.bazel
 bazel_dep(name = "llvm", version = "0.8.25")      # hermetic toolchain
 bazel_dep(name = "rules_cuda", version = "0.3.0") # CUDA rules & redist
-bazel_dep(name = "libtorch", version = "2.14.1")
+bazel_dep(name = "rules_torch", version = "0.0.2")
 register_toolchains("@llvm//toolchain:all")
+
+libtorch = use_extension("@rules_torch//libtorch:extensions.bzl", "libtorch")
+libtorch.version(version = "2.14.1")
+use_repo(libtorch, "libtorch")
 ```
 
 ```starlark
@@ -103,6 +111,43 @@ bazel build //:app --platforms=@llvm//platforms:macos_arm64
 bazel build //:app --platforms=@llvm//platforms:windows_amd64
 bazel build //:app --platforms=@llvm//platforms:linux_arm64_gnu.2.34
 ```
+
+### Choosing the PyTorch source
+
+`rules_torch` ships the Bazel build (an overlay of `BUILD` and `.bzl` files)
+and a small set of patches for each PyTorch version it supports; the list is
+[`versions.bzl`](https://github.com/asymingt/rules_torch/blob/main/libtorch/private/versions.bzl). `libtorch.version()`
+picks one of them. To build a fork or a specific commit instead, use
+`libtorch.source()` with the overlay (and, by default, the patches) of the
+nearest supported version:
+
+```starlark
+libtorch.source(
+    version = "2.14.1",                       # overlay and default patches to use
+    urls = ["https://github.com/pytorch/pytorch/archive/<sha>.tar.gz"],
+    strip_prefix = "pytorch-<sha>",
+    integrity = "sha256-...",
+    patches = ["//third_party:my_torch.patch"],  # applied after the defaults
+    # default_patches = False,                # ... or instead of them
+)
+```
+
+Only the root module may use `libtorch.source()`; non-root modules may ask for
+a `libtorch.version()`, and the root module's choice wins. The overlay follows
+upstream's tree layout, so a source close to the named version builds as-is,
+while a different minor release needs an overlay of its own (a `rules_torch`
+release, not something a consumer can add). [`examples/custom_source`](examples/custom_source)
+is a complete root module using `libtorch.source()`.
+
+### Migrating from the `libtorch` module
+
+Earlier revisions of this registry published `@libtorch` as a module of its
+own (`bazel_dep(name = "libtorch", version = "2.14.1")`), which is also what the
+[ROS Central Registry](https://github.com/openrobotics/ros-central-registry)
+carries. That module is deprecated and will not get new versions: replace the
+`bazel_dep` with the three `rules_torch` lines above. `@libtorch//...` targets
+and `--@libtorch//:...` flags are unchanged. A root module cannot have both
+(Bazel reports the repo name `libtorch` as already used).
 
 ## What's in the box
 
@@ -173,16 +218,19 @@ otherwise reject `libc++` on x86). We recommend registering the hermetic
   installed, and binaries bind to the real hardware drivers at runtime.
 - **Cross-compilable across 6 platforms.** One Linux host can produce
   Linux/macOS/Windows binaries for `x86_64` and `arm64`.
-- **No patches to PyTorch.** `@libtorch` is the pristine upstream `v2.14.1`
-  tarball plus a registry overlay (`BUILD.bazel`, `MODULE.bazel`, config/codegen
-  `.bzl` files).
+- **(Almost) no patches to PyTorch.** `@libtorch` is the upstream release
+  tarball plus an overlay (`BUILD.bazel` and config/codegen `.bzl` files) that
+  `rules_torch` lays over it. The two patches it carries for 2.14.1 are
+  compatibility fixes (`glog` 0.7, a placeholder header), listed per version in
+  [`versions.bzl`](https://github.com/asymingt/rules_torch/blob/main/libtorch/private/versions.bzl).
 
 ## Layout
 
 | Path | Purpose |
 | --- | --- |
-| `bazel_registry.json`, `modules/` | The Bazel registry, published to GitHub Pages on every merge (`.github/workflows/ci.yaml`). |
-| `libtorch.txt` | Target pattern list (`//...` plus `@<module>//...` for all local registry modules), selected by `--config=libtorch`. |
+| `bazel_registry.json`, `modules/` | The Bazel registry, published to GitHub Pages on every merge (`.github/workflows/ci.yaml`). `modules/rules_torch/` points at the releases of [rules_torch](https://github.com/asymingt/rules_torch), which holds the `libtorch` extension and the per-version overlays and patches; `modules/libtorch/` is its deprecated predecessor, kept as published. |
+| `examples/custom_source/` | A root module using `libtorch.source()`; its `@libtorch//:c10` is built by CI. |
+| `libtorch.txt` | Target pattern list (`//...`, `@libtorch//...` and `@rules_torch//...`), selected by `--config=libtorch`. |
 | `tests/` | Smoke and runtime tests per LibTorch subsystem and GPU backend, run natively and cross-compiled by the CI matrix. |
 | `design/` | Architecture and engineering plans (`DESIGN.md`, `PHASE1.md` ... `PHASE5.md`). |
 | `patches/` | Patches for third-party BCR modules, one directory per module, applied via `single_version_override`. See below. |

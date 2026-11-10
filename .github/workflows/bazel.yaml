@@ -236,6 +236,19 @@ jobs:
         shell: bash
         run: bazel test $PLATFORM_FLAG //...
 
+      # The libtorch.source() path of rules_torch's extension, from a separate
+      # root module (see examples/custom_source/MODULE.bazel). Its @libtorch is
+      # the same v2.14.1 archive under another URL, so the repository cache
+      # already has it; only :c10 is compiled.
+      - name: Build examples/custom_source (${{ inputs.host }})
+        if: inputs.test && runner.os == 'Linux'
+        shell: bash
+        working-directory: examples/custom_source
+        run: |
+          bazel build @libtorch//:c10; status=$?
+          bazel shutdown   # a separate server; the step below only stops the root's
+          exit $status
+
       - name: Force bazel shutdown to enable cache sync
         if: always()
         shell: bash

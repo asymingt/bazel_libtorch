@@ -125,6 +125,7 @@ Depend on the resolved settings (`@libtorch//:cuda_enabled`, `:rocm_enabled`, `:
 | Releases as versions (e.g. `fbgemm` 1.1.0, `kineto` 0.4.0) | PyTorch's submodule commits | These are what PyTorch 2.14.1 is tested with. |
 | Distributed on Linux and Windows | Linux only | Gloo and the BCR's libuv assume MSVC on Windows; our toolchain targets MinGW. |
 | Kineto with ROCm and XPU tracing | CPU-only Kineto for ROCm and XPU | rocprofiler-sdk and Intel's PTI are not available. |
+| `@libtorch` as a registry module (`libtorch/2.14.1`, with the Bazel build as a registry overlay) | `rules_torch` 0.0.1, a module whose `libtorch` extension fetches a PyTorch archive and lays the same overlay over it (`libtorch.version()` / `libtorch.source()`) | Choosing another PyTorch version or a fork from a consumer's `MODULE.bazel`, without editing a registry. The `libtorch` module stays as published (it was copied into the ROS Central Registry) and is marked deprecated in its `metadata.json`; overlays and patches are per version under `libtorch/` of https://github.com/asymingt/rules_torch. |
 
 ## 5. Upstream Issues Found
 
