@@ -11,7 +11,7 @@
         "bazel/typing_extensions.BUILD.bazel": "sha256-CgSt+IoBwKUESgo6kcxLHF0j2bh6HHHX/LDp4GH3qWE=",
         "fatbin.lds": "sha256-bvYB6Jobr3vkbX3JNp5sNzpaQVY/6AatRQu+JH91LIM=",
         "libtorch_codegen.bzl": "sha256-Q7zd2Ua1B0srFncreN0bla6NSP9ttz2NelBToUxyPL4=",
-        "libtorch_config.bzl": "sha256-iQWZI9itZN84p1GNnQ9Gma98+hgonZKvH0L+WeHN6Q0=",
+        "libtorch_config.bzl": "sha256-Pz5x5uRB/4jvDU2GIEcK78qQK1vDJTK+mge2dHty4n0=",
         "libtorch_hip.bzl": "sha256-R/kne76SD9j9Pu5RpW0tVn/2REIqF+/fd2N1KMs+ua0=",
         "libtorch_sources.bzl": "sha256-Fe1OURtxlMPZYX56bksoxGxAtGCUYkCF5axv7A3ClhA=",
         "mingw/include/WinError.h": "sha256-6aSED494wtIYqc1ii7Q2z8yC6TsYmUk1jHo7FJzj3eY=",
@@ -29,6 +29,7 @@
     },
     "patch_strip": 1,
     "patches": {
+        "glog_0_7_compat.patch": "sha256-laq7H3kf6QzDRHBv+aHUxv09NGB7XnY3sbKBAuHTWwg=",
         "remove_placeholder_macros_h.patch": "sha256-jeZetZY9L/OaTy4tsd+caXyB3NFOxm6Uhk9lp7uUi98="
     }
 }
