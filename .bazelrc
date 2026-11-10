@@ -93,8 +93,8 @@ common:rocm --@libtorch//:gpu=rocm
 common:xpu --@libtorch//:gpu=xpu
 
 # Build every target of this workspace and of every local registry module
-# (see libtorch.txt), e.g. `bazel build --config=libtorch`.
-build:libtorch --target_pattern_file=libtorch.txt
+# (see all.txt), e.g. `bazel build --config=all`.
+build:all --target_pattern_file=all.txt
 
 # CI defaults (see .github/workflows/pull_request.yaml)
 common:ci --announce_rc

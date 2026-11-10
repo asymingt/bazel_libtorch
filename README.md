@@ -1,4 +1,4 @@
-# LibTorch 2.14 for Bazel — from source, hermetic, cross-compiled
+# libtorch for Bazel — from source, hermetic, cross-compiled
 
 This repository is a **staging area for a set of Bazel modules that build
 LibTorch (`pytorch/pytorch`, currently 2.14.1) from source** with a hermetic LLVM
@@ -230,20 +230,20 @@ otherwise reject `libc++` on x86). We recommend registering the hermetic
 | --- | --- |
 | `bazel_registry.json`, `modules/` | The Bazel registry, published to GitHub Pages on every merge (`.github/workflows/ci.yaml`). `modules/rules_torch/` points at the releases of [rules_torch](https://github.com/asymingt/rules_torch), which holds the `libtorch` extension and the per-version overlays and patches; `modules/libtorch/` is its deprecated predecessor, kept as published. |
 | `examples/custom_source/` | A root module using `libtorch.source()`; its `@libtorch//:c10` is built by CI. |
-| `libtorch.txt` | Target pattern list (`//...`, `@libtorch//...` and `@rules_torch//...`), selected by `--config=libtorch`. |
+| `all.txt` | Target pattern list of the whole distribution: `//...`, `@libtorch//...`, `@rules_torch//...` and `@<module>//...` for every other module of the registry (all of them are dev dependencies of the root module for this purpose). Selected by `--config=all`. |
 | `tests/` | Smoke and runtime tests per LibTorch subsystem and GPU backend, run natively and cross-compiled by the CI matrix. |
 | `design/` | Architecture and engineering plans (`DESIGN.md`, `PHASE1.md` ... `PHASE5.md`). |
 | `patches/` | Patches for third-party BCR modules, one directory per module, applied via `single_version_override`. See below. |
 | `.github/workflows/` | CI: `pull_request.yaml` (build/test matrix), `bazel.yaml` (one host/target job), `cache_cleanup.yaml`, `ci.yaml` (registry publishing). See [Continuous integration](#continuous-integration). |
-| `.bazelrc` | Toolchain flags, `--config=libtorch`, `rules_cuda` flags, and sanitizer configs. No platform is pinned, so `bazel test //...` builds natively on any supported host; cross-compile by passing `--platforms=@llvm//platforms:<os>_<arch>` explicitly. Warnings from third-party (non-LibTorch) dependencies are silenced so that LibTorch's own stand out. |
+| `.bazelrc` | Toolchain flags, `--config=all`, `rules_cuda` flags, and sanitizer configs. No platform is pinned, so `bazel test //...` builds natively on any supported host; cross-compile by passing `--platforms=@llvm//platforms:<os>_<arch>` explicitly. Warnings from third-party (non-LibTorch) dependencies are silenced so that LibTorch's own stand out. |
 | `bazel_downloader.cfg` | Download mirrors for upstream tarballs of BCR modules we cannot annotate with `mirror_urls`. |
 
 ## Continuous integration
 
 `pull_request.yaml` runs on every pull request and on every push to `main`:
 
-1. **Native** (6 jobs): build `--config=libtorch` (`//...` and every `@<module>//...`) and test `//...` on each of Linux, macOS and Windows, `x86_64` and `arm64`.
-2. **Cross** (30 jobs): every host cross-compiles `--config=libtorch` for every other platform. These only start once all native jobs are green.
+1. **Native** (6 jobs): build `--config=all` (`//...` and every `@<module>//...`) and test `//...` on each of Linux, macOS and Windows, `x86_64` and `arm64`.
+2. **Cross** (30 jobs): every host cross-compiles `--config=all` for every other platform. These only start once all native jobs are green.
 3. **`last_rc`**: repeats the native and cross matrix with Bazel's latest release candidate. Its failures are reported but never fail the run.
 4. **Status** (`main` only): publishes one [build status](#build-status) matrix per Bazel version to the `status` branch.
 

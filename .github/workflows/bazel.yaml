@@ -196,11 +196,11 @@ jobs:
         shell: bash
         run: bazel version
 
-      # --config=libtorch builds //... plus every @<module>//... of the local
-      # registry (see libtorch.txt).
+      # --config=all builds //... plus every @<module>//... of the local
+      # registry (see all.txt).
       - name: Analyze (${{ inputs.host }} -> ${{ inputs.target }})
         shell: bash
-        run: bazel build --nobuild --config=libtorch $PLATFORM_FLAG
+        run: bazel build --nobuild --config=all $PLATFORM_FLAG
 
       # Stop the build after 5 hours to leave ~1 hour before GitHub's 360-minute
       # job timeout for `bazel shutdown` and uploading the cache. Cold builds on
@@ -216,7 +216,7 @@ jobs:
         shell: bash
         run: |
           date +%s > "${{ runner.temp }}/build_start"
-          bazel build --config=libtorch $PLATFORM_FLAG
+          bazel build --config=all $PLATFORM_FLAG
 
       - name: Check if build timed out
         id: build-timeout
