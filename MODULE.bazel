@@ -142,9 +142,51 @@ bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_cc", version = "0.2.26")
 bazel_dep(name = "rules_license", version = "1.0.0")
 
-# LibTorch (served from the local registry under modules/, see .bazelrc)
+# Not a direct dependency (libtorch -> glog), but overridden so that its Bazel
+# build compiles with MinGW: it assumes MSVC on Windows and does not run the
+# CMake feature checks that would find MinGW's POSIX headers. See
+# patches/glog/.
+bazel_dep(name = "glog", version = "0.7.1.bcr.2")
+single_version_override(
+    module_name = "glog",
+    patch_strip = 1,
+    patches = ["//patches:glog/mingw.patch"],
+    version = "0.7.1.bcr.2",
+)
 
-bazel_dep(name = "libtorch", version = "2.14.1")
+# LibTorch: rules_torch (https://github.com/asymingt/rules_torch, served from
+# the local registry under modules/, see .bazelrc) and its `libtorch`
+# extension, which fetches the PyTorch sources and creates @libtorch. To work
+# on a checkout of rules_torch, put
+#   common --override_module=rules_torch=../rules_torch
+# in user.bazelrc.
+
+bazel_dep(name = "rules_torch", version = "0.0.3")
+
+libtorch = use_extension("@rules_torch//libtorch:extensions.bzl", "libtorch")
+libtorch.version(version = "2.14.1")
+use_repo(libtorch, "libtorch")
+
 bazel_dep(name = "hip-stub", version = "7.14.1")
 bazel_dep(name = "rocm-device-libs", version = "7.14.1")
 bazel_dep(name = "rocm-libraries-stub", version = "7.14.1")
+
+# Every other module of the local registry, so that `--config=all` (see
+# all.txt) builds the whole distribution -- `@<module>//...` for each -- and
+# not only what @libtorch happens to depend on. Dev dependencies: consumers get
+# them through rules_torch. Versions match modules/<name>/metadata.json.
+bazel_dep(name = "asmjit", version = "0.0.0-20250628-a3199e8", dev_dependency = True)
+bazel_dep(name = "cpp-httplib", version = "0.50.1", dev_dependency = True)
+bazel_dep(name = "cutlass", version = "4.6.1", dev_dependency = True)
+bazel_dep(name = "fbgemm", version = "0.0.0-20260514-bf6dce3", dev_dependency = True)
+bazel_dep(name = "flatbuffers", version = "24.12.23", dev_dependency = True)
+bazel_dep(name = "gloo", version = "0.0.0-20260610-74cc005", dev_dependency = True)
+bazel_dep(name = "glslang", version = "16.6.0", dev_dependency = True)
+bazel_dep(name = "ittapi", version = "3.26.3.bcr.1", dev_dependency = True)
+bazel_dep(name = "kineto", version = "0.0.0-20260805-15f4784", dev_dependency = True)
+bazel_dep(name = "level-zero", version = "1.35.0", dev_dependency = True)
+bazel_dep(name = "opencl-headers", version = "2025.07.22", dev_dependency = True)
+bazel_dep(name = "sleef", version = "3.8.0", dev_dependency = True)
+bazel_dep(name = "sycl-stub", version = "7.2.0", dev_dependency = True)
+bazel_dep(name = "volk", version = "1.4.341.0", dev_dependency = True)
+bazel_dep(name = "vulkan-memory-allocator", version = "3.3.0", dev_dependency = True)

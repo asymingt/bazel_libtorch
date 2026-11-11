@@ -1,0 +1,9 @@
+{
+    "integrity": "sha256-Q1v9majZp7eytP3jMTLXrqEl5hLezJE4v/aJXtAUTpU=",
+    "strip_prefix": "ittapi-3.26.3",
+    "url": "https://github.com/intel/ittapi/archive/refs/tags/v3.26.3.tar.gz",
+    "overlay": {
+        "BUILD.bazel": "sha256-PwcCkWQj//oyO/gyjj94YRRjUi5mT9lyavvIhYubQlY=",
+        "MODULE.bazel": "sha256-5430rlXGCtiAj8atzJrK5SQr4wJ+Z1nUH2N3xkdJWSs="
+    }
+}

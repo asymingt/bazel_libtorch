@@ -48,8 +48,10 @@ common --@rules_cuda//cuda:copts=--compress-all
 # CUDA redistributables, ... -- are not ours to fix, and their warnings bury
 # LibTorch's. Silence them so a LibTorch warning stands out. The leading .*
 # also matches generated sources (bazel-out/<cfg>/bin/external/<repo>/...).
-common --per_file_copt=.*external/(?!libtorch)[^/]+/.*@-w
-common --host_per_file_copt=.*external/(?!libtorch)[^/]+/.*@-w
+# @libtorch is created by rules_torch's extension, so its directory is
+# external/rules_torch++libtorch+libtorch.
+common --per_file_copt=.*external/(?![^/]*libtorch/)[^/]+/.*@-w
+common --host_per_file_copt=.*external/(?![^/]*libtorch/)[^/]+/.*@-w
 
 # Mirrors for flaky upstream download hosts (BCR modules we cannot annotate).
 common --downloader_config=bazel_downloader.cfg
@@ -91,8 +93,8 @@ common:rocm --@libtorch//:gpu=rocm
 common:xpu --@libtorch//:gpu=xpu
 
 # Build every target of this workspace and of every local registry module
-# (see libtorch.txt), e.g. `bazel build --config=libtorch`.
-build:libtorch --target_pattern_file=libtorch.txt
+# (see all.txt), e.g. `bazel build --config=all`.
+build:all --target_pattern_file=all.txt
 
 # CI defaults (see .github/workflows/pull_request.yaml)
 common:ci --announce_rc

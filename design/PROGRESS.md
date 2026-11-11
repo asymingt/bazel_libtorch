@@ -53,7 +53,7 @@ Depend on the resolved settings (`@libtorch//:cuda_enabled`, `:rocm_enabled`, `:
 - **Hermetic toolchain:** `@llvm` 0.8.25 (Clang 23, libc++) with 11 patches (`patches/llvm/`), plus `@rules_cuda` 0.3.0 with 2 patches (`patches/rules_cuda/`).
 - **BCR module patches:** `cpuinfo` (Windows-on-Arm header) and `gflags` (choose Windows by target platform).
 - **Targets:** `@libtorch//:headeronly`, `:c10` and `:c10_shared`.
-  - `glog` is pinned at a patched 0.6.0 (`0.6.0.bcr.0`), because c10 needs glog ≤ 0.6.
+  - `glog` comes from the BCR (0.7.1.bcr.2) since rules_torch 0.0.3; its 2.14.1 compatibility patch covers both callers of glog's removed internal `IsGoogleLoggingInitialized()` (`c10/util/Logging.cpp` and `c10/util/Exception.cpp`). The registry's patched `glog` 0.6.0.bcr.0 was removed with the `libtorch` module.
   - MinGW-compatibility headers let the MSVC-oriented sources build for Windows with Clang.
 - **Tests:** `c10_smoke`, `hello_world`.
 
@@ -125,6 +125,7 @@ Depend on the resolved settings (`@libtorch//:cuda_enabled`, `:rocm_enabled`, `:
 | Releases as versions (e.g. `fbgemm` 1.1.0, `kineto` 0.4.0) | PyTorch's submodule commits | These are what PyTorch 2.14.1 is tested with. |
 | Distributed on Linux and Windows | Linux only | Gloo and the BCR's libuv assume MSVC on Windows; our toolchain targets MinGW. |
 | Kineto with ROCm and XPU tracing | CPU-only Kineto for ROCm and XPU | rocprofiler-sdk and Intel's PTI are not available. |
+| `@libtorch` as a registry module (`libtorch/2.14.1`, with the Bazel build as a registry overlay) | `rules_torch` 0.0.1, a module whose `libtorch` extension fetches a PyTorch archive and lays the same overlay over it (`libtorch.version()` / `libtorch.source()`) | Choosing another PyTorch version or a fork from a consumer's `MODULE.bazel`, without editing a registry. The `libtorch` module was removed from this registry (the ROS Central Registry keeps its copy); overlays and patches are per version under `libtorch/` of https://github.com/asymingt/rules_torch. |
 
 ## 5. Upstream Issues Found
 

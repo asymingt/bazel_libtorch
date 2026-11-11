@@ -1,0 +1,29 @@
+# A root module that builds @libtorch from a PyTorch source archive of its own
+# choosing with libtorch.source(), instead of one of the releases rules_torch
+# knows (libtorch.version()). The archive here is the v2.14.1 release again,
+# fetched from a different URL, so the test exercises the override path without
+# a second download in CI (same content, same hash, same repository cache entry).
+#
+# Built by the root workspace's CI; see README.md.
+
+module(name = "custom_source_example")
+
+bazel_dep(name = "rules_torch", version = "0.0.3")
+
+libtorch = use_extension("@rules_torch//libtorch:extensions.bzl", "libtorch")
+
+# `version` names the release whose overlay (Bazel build) and default patches
+# are applied to the archive; the archive itself comes from `urls`.
+libtorch.source(
+    integrity = "sha256-SzSGi6YcJHQN4nontsCcqggtpSGdZ1p96y27zhxas2Y=",
+    strip_prefix = "pytorch-2.14.1",
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/pytorch/pytorch/tar.gz/refs/tags/v2.14.1"],
+    version = "2.14.1",
+)
+use_repo(libtorch, "libtorch")
+
+# Hermetic LLVM toolchain, as recommended in README.md.
+bazel_dep(name = "llvm", version = "0.8.25")
+
+register_toolchains("@llvm//toolchain:all")

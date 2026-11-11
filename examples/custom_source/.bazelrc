@@ -1,0 +1,15 @@
+# The local registry at the root of this repository, ahead of the BCR.
+common --registry=file://%workspace%/../../
+common --registry=https://bcr.bazel.build
+common --lockfile_mode=off
+common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+common --features=system_include_paths
+common --@llvm//config:experimental_stub_libgcc_s=False
+
+# CI passes --config=ci through the user bazelrc (see .github/workflows/bazel.yaml).
+common:ci --announce_rc
+common:ci --show_timestamps
+common:ci --http_timeout_scaling=3
+common:ci --http_connector_attempts=12
+common:ci --experimental_repository_downloader_retries=10
+build:ci --verbose_failures

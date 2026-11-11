@@ -12,7 +12,8 @@
         "github:intel/ittapi"
     ],
     "versions": [
-        "3.26.3"
+        "3.26.3",
+        "3.26.3.bcr.1"
     ],
     "yanked_versions": {}
 }
