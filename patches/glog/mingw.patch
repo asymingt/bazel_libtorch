@@ -1,0 +1,78 @@
+The Bazel build assumes MSVC on Windows: it generates config.h from
+src/config.h.cmake.in without CMake's feature checks, so with MinGW-w64 (e.g.
+Clang targeting x86_64-w64-windows-gnu) src/logging.cc typedefs its own
+`mode_t`, conflicting with <sys/types.h>'s; and it links `dbghelp.lib` by
+file name, which GNU-style linkers do not resolve. Declare MinGW's POSIX
+headers in config.h, and link `-ldbghelp` when the Windows toolchain is
+clang or mingw-gcc rather than msvc-cl or clang-cl.
+
+diff --git a/BUILD.bazel b/BUILD.bazel
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -6,6 +6,19 @@
+ 
+ glog_library()
+ 
++# Windows with a GNU-style (MinGW-w64) toolchain rather than MSVC or clang-cl.
++config_setting(
++    name = "windows_clang",
++    constraint_values = ["@platforms//os:windows"],
++    flag_values = {"@rules_cc//cc/compiler:compiler": "clang"},
++)
++
++config_setting(
++    name = "windows_mingw_gcc",
++    constraint_values = ["@platforms//os:windows"],
++    flag_values = {"@rules_cc//cc/compiler:compiler": "mingw-gcc"},
++)
++
+ # platform() to build with clang-cl on Bazel CI. This is enabled with
+ # the flags in .bazelci/presubmit.yml:
+ #
+diff --git a/bazel/glog.bzl b/bazel/glog.bzl
+--- a/bazel/glog.bzl
++++ b/bazel/glog.bzl
+@@ -221,6 +221,10 @@
+             "//conditions:default": [],
+         }),
+         linkopts = select({
++            # MinGW toolchains link GNU-style; these settings specialize the
++            # plain Windows one below, so they win where they match.
++            ":windows_clang": ["-ldbghelp"],
++            ":windows_mingw_gcc": ["-ldbghelp"],
+             "@bazel_tools//src/conditions:windows": ["dbghelp.lib"],
+             "//conditions:default": [],
+         }),
+diff --git a/src/config.h.cmake.in b/src/config.h.cmake.in
+--- a/src/config.h.cmake.in
++++ b/src/config.h.cmake.in
+@@ -1,6 +1,20 @@
+ #ifndef GLOG_CONFIG_H
+ #define GLOG_CONFIG_H
+ 
++/* MinGW-w64 provides these POSIX headers and types. CMake detects them; the
++   Bazel build, which only strips the cmakedefines below, does not. */
++#if defined(__MINGW32__)
++#  ifndef HAVE_MODE_T
++#    define HAVE_MODE_T
++#  endif
++#  ifndef HAVE_SYS_TYPES_H
++#    define HAVE_SYS_TYPES_H
++#  endif
++#  ifndef HAVE_UNISTD_H
++#    define HAVE_UNISTD_H
++#  endif
++#endif
++
+ /* Define if you have the `dladdr' function */
+ #cmakedefine HAVE_DLADDR
+ 
+diff --git a/MODULE.bazel b/MODULE.bazel
+--- a/MODULE.bazel
++++ b/MODULE.bazel
+@@ -7,4 +7,5 @@
+ 
+ bazel_dep(name = "gflags", version = "2.2.2.bcr.1", repo_name = "com_github_gflags_gflags")
+ bazel_dep(name = "package_metadata", version = "0.0.13")
++bazel_dep(name = "platforms", version = "0.0.10")
+ bazel_dep(name = "rules_cc", version = "0.0.12")

@@ -5,11 +5,11 @@ matrix:
     - ubuntu2204
     - ubuntu2404
     - windows
-  bazel: [8.x, 9.x, rolling]
+  bazel: [9.x, rolling]
 tasks:
   verify_targets:
     name: Verify build targets
     platform: ${{ platform }}
     bazel: ${{ bazel }}
     build_targets:
-      - '@glog//:glog'
+      - '@rules_torch//...'

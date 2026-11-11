@@ -8,7 +8,7 @@
 
 module(name = "custom_source_example")
 
-bazel_dep(name = "rules_torch", version = "0.0.2")
+bazel_dep(name = "rules_torch", version = "0.0.3")
 
 libtorch = use_extension("@rules_torch//libtorch:extensions.bzl", "libtorch")
 
